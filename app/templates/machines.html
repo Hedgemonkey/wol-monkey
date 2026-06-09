@@ -74,6 +74,58 @@
 
 {% block scripts %}
 <script>
+// ── Status helpers ────────────────────────────────────────────────────────────
+const STATE_MAP = {
+  online:  ['bg-green-400', 'Online'],
+  offline: ['bg-red-400',   'Offline'],
+  unknown: ['bg-gray-400',  'Unknown'],
+};
+
+function applyStatus(mid, state) {
+  const el = document.getElementById(`status-${mid}`);
+  if (!el) return;
+  const dot = el.querySelector('span');
+  const [cls, label] = STATE_MAP[state] || STATE_MAP.unknown;
+  dot.className = `w-1.5 h-1.5 rounded-full ${cls} inline-block`;
+  el.lastChild.textContent = label;
+}
+
+function setProbing(mid) {
+  const el = document.getElementById(`status-${mid}`);
+  if (!el) return;
+  const dot = el.querySelector('span');
+  dot.className = 'w-1.5 h-1.5 rounded-full bg-gray-300 animate-pulse inline-block';
+  el.lastChild.textContent = 'Checking…';
+}
+
+async function probeOne(mid) {
+  setProbing(mid);
+  try {
+    const r = await fetch(`/api/machines/${mid}/status`);
+    if (!r.ok) { applyStatus(mid, 'unknown'); return; }
+    const data = await r.json();
+    applyStatus(mid, data.state);
+  } catch {
+    applyStatus(mid, 'unknown');
+  }
+}
+
+// ── Auto-probe: stagger on load, then refresh every 30 s ─────────────────────
+const machineIds = [...document.querySelectorAll('[data-machine-id]')]
+  .map(el => el.dataset.machineId)
+  .filter((v, i, a) => a.indexOf(v) === i);  // dedupe
+
+async function probeAll() {
+  for (let i = 0; i < machineIds.length; i++) {
+    await probeOne(machineIds[i]);
+    if (i < machineIds.length - 1) await new Promise(r => setTimeout(r, 300));
+  }
+}
+
+probeAll();
+setInterval(probeAll, 30000);
+
+// ── Wake buttons ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.wake-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     const mid = btn.dataset.machineId;
@@ -89,7 +141,7 @@ document.querySelectorAll('.wake-btn').forEach(btn => {
       const data = await r.json();
       btn.textContent = r.ok ? '✓ Sent' : '✗ Error';
       setTimeout(() => { btn.textContent = 'Wake'; btn.disabled = false; }, 3000);
-      if (r.ok) pollStatus(mid, data.attempt_id, csrf);
+      if (r.ok) pollAttempt(mid, data.attempt_id);
     } catch {
       btn.textContent = '✗ Error';
       btn.disabled = false;
@@ -97,46 +149,37 @@ document.querySelectorAll('.wake-btn').forEach(btn => {
   });
 });
 
+// ── Manual probe buttons ──────────────────────────────────────────────────────
 document.querySelectorAll('.probe-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     const mid = btn.dataset.machineId;
     btn.disabled = true;
     btn.textContent = 'Probing…';
-    try {
-      const r = await fetch(`/api/machines/${mid}/status`);
-      const data = await r.json();
-      const el = document.getElementById(`status-${mid}`);
-      const dot = el.querySelector('span');
-      const stateMap = {online: ['bg-green-400','Online'], offline: ['bg-red-400','Offline'], unknown: ['bg-gray-400','Unknown']};
-      const [cls, label] = stateMap[data.state] || stateMap.unknown;
-      dot.className = `w-1.5 h-1.5 rounded-full ${cls} inline-block`;
-      el.lastChild.textContent = label;
-    } finally {
-      btn.textContent = 'Probe';
-      btn.disabled = false;
-    }
+    await probeOne(mid);
+    btn.textContent = 'Probe';
+    btn.disabled = false;
   });
 });
 
-async function pollStatus(mid, attemptId, csrf) {
-  const el = document.getElementById(`status-${mid}`);
+// ── Wake attempt polling ──────────────────────────────────────────────────────
+async function pollAttempt(mid, attemptId) {
   for (let i = 0; i < 24; i++) {
     await new Promise(r => setTimeout(r, 5000));
     const r = await fetch(`/api/machines/${mid}/attempts/${attemptId}`);
     if (!r.ok) break;
     const data = await r.json();
-    const dot = el.querySelector('span');
     if (data.status === 'online') {
-      dot.className = 'w-1.5 h-1.5 rounded-full bg-green-400 inline-block';
-      el.lastChild.textContent = 'Online';
+      applyStatus(mid, 'online');
       break;
-    } else if (['failed','timeout'].includes(data.status)) {
-      dot.className = 'w-1.5 h-1.5 rounded-full bg-red-400 inline-block';
-      el.lastChild.textContent = data.status;
+    } else if (['failed', 'timeout'].includes(data.status)) {
+      applyStatus(mid, 'offline');
       break;
     } else {
-      dot.className = 'w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse inline-block';
-      el.lastChild.textContent = 'Waking…';
+      const el = document.getElementById(`status-${mid}`);
+      if (el) {
+        el.querySelector('span').className = 'w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse inline-block';
+        el.lastChild.textContent = 'Waking…';
+      }
     }
   }
 }
