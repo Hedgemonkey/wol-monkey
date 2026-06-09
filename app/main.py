@@ -10,9 +10,9 @@ from fastapi import FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, Response
+from starlette.responses import Response
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
@@ -31,8 +31,8 @@ logger = structlog.get_logger(__name__)
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to every response."""
 
-    async def dispatch(self, request: Request, call_next: object) -> Response:
-        response: Response = await call_next(request)  # type: ignore[arg-type]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        response: Response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -97,7 +97,7 @@ def create_app() -> FastAPI:
     _templates = Jinja2Templates(directory=str(pathlib.Path(__file__).parent / "templates"))
 
     @app.exception_handler(500)
-    async def internal_error_handler(request: Request, exc: Exception) -> HTMLResponse:
+    async def internal_error_handler(request: Request, exc: Exception) -> Response:
         logger.error("unhandled_exception", path=request.url.path, error=str(exc))
         return _templates.TemplateResponse(
             request,
@@ -107,7 +107,7 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(404)
-    async def not_found_handler(request: Request, exc: Exception) -> HTMLResponse:
+    async def not_found_handler(request: Request, exc: Exception) -> Response:
         if request.url.path.startswith("/api/"):
             return Response(
                 content='{"detail":"Not found"}', status_code=404, media_type="application/json"

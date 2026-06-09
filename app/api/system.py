@@ -87,7 +87,7 @@ def _parse_wireless_names() -> set[str]:
 
 def _route_hex_to_be_int(h: str) -> int:
     """Route table stores IPs as LE hex; swap bytes to get BE int for inet_aton comparison."""
-    return struct.unpack(">I", struct.pack("<I", int(h, 16)))[0]
+    return int(struct.unpack(">I", struct.pack("<I", int(h, 16)))[0])
 
 
 def _parse_iface_ips() -> dict[str, list[str]]:
