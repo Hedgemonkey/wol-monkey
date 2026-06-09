@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.persistence.repositories import (
+    SqlApiTokenRepository,
     SqlMachineRepository,
     SqlSessionRepository,
     SqlSettingsRepository,
@@ -249,3 +250,162 @@ class TestSetupStateRepository:
         await repo.get()  # ensure exists
         updated = await repo.update(current_step="create_admin")
         assert updated.current_step == "create_admin"
+
+
+# ---------------------------------------------------------------------------
+# ApiToken repository
+# ---------------------------------------------------------------------------
+class TestApiTokenRepository:
+    async def _make_user(self, db_session: AsyncSession, suffix: str = "1") -> str:
+        repo = SqlUserRepository(db_session)
+        u = await repo.create(username=f"tokenuser{suffix}", password_hash="h")
+        return u.id
+
+    async def _make_machine(self, db_session: AsyncSession, suffix: str = "1") -> str:
+        repo = SqlMachineRepository(db_session)
+        m = await repo.create(
+            name=f"TokenMachine{suffix}",
+            ip_address="10.0.0.1",
+            mac_address=f"aa:bb:cc:dd:ee:{int(suffix) % 256:02x}",
+            ssh_port=22,
+            wake_strategy="etherwake",
+        )
+        return m.id
+
+    async def test_create_global_token(self, db_session: AsyncSession) -> None:
+        user_id = await self._make_user(db_session, "2")
+        repo = SqlApiTokenRepository(db_session)
+        token = await repo.create(
+            name="global key",
+            token_hash="hash_global",
+            prefix="wm_1",
+            scopes={},
+            user_id=user_id,
+        )
+        assert token.name == "global key"
+        assert token.machine_id is None
+        assert token.user_id == user_id
+
+    async def test_create_machine_scoped_token(self, db_session: AsyncSession) -> None:
+        user_id = await self._make_user(db_session, "3")
+        machine_id = await self._make_machine(db_session, "3")
+        repo = SqlApiTokenRepository(db_session)
+        token = await repo.create(
+            name="laptop key",
+            token_hash="hash_laptop",
+            prefix="wm_2",
+            scopes={},
+            user_id=user_id,
+            machine_id=machine_id,
+        )
+        assert token.machine_id == machine_id
+
+    async def test_list_active_returns_unrevoked(self, db_session: AsyncSession) -> None:
+        user_id = await self._make_user(db_session, "4")
+        repo = SqlApiTokenRepository(db_session)
+        await repo.create(
+            name="active", token_hash="hash_active", prefix="wm_3", scopes={}, user_id=user_id
+        )
+        await repo.create(
+            name="to_revoke", token_hash="hash_revoke", prefix="wm_4", scopes={}, user_id=user_id
+        )
+        tokens_before = await repo.list_active()
+        names_before = {t.name for t in tokens_before}
+        assert "active" in names_before
+        assert "to_revoke" in names_before
+
+        # Revoke one
+        revoke_id = next(t.id for t in tokens_before if t.name == "to_revoke")
+        await repo.revoke(revoke_id)
+        await db_session.commit()
+
+        tokens_after = await repo.list_active()
+        names_after = {t.name for t in tokens_after}
+        assert "active" in names_after
+        assert "to_revoke" not in names_after
+
+    async def test_list_for_machine_filters_correctly(self, db_session: AsyncSession) -> None:
+        user_id = await self._make_user(db_session, "5")
+        machine_id = await self._make_machine(db_session, "5")
+        repo = SqlApiTokenRepository(db_session)
+
+        # Create one token scoped to the machine, one global
+        await repo.create(
+            name="scoped",
+            token_hash="hash_scoped5",
+            prefix="wm_5",
+            scopes={},
+            user_id=user_id,
+            machine_id=machine_id,
+        )
+        await repo.create(
+            name="unscoped",
+            token_hash="hash_unscoped5",
+            prefix="wm_6",
+            scopes={},
+            user_id=user_id,
+            machine_id=None,
+        )
+
+        machine_tokens = await repo.list_for_machine(machine_id)
+        assert len(machine_tokens) == 1
+        assert machine_tokens[0].name == "scoped"
+
+    async def test_list_for_machine_invalid_uuid_returns_empty(
+        self, db_session: AsyncSession
+    ) -> None:
+        repo = SqlApiTokenRepository(db_session)
+        result = await repo.list_for_machine("not-a-uuid")
+        assert result == []
+
+    async def test_get_by_hash_returns_token(self, db_session: AsyncSession) -> None:
+        user_id = await self._make_user(db_session, "6")
+        repo = SqlApiTokenRepository(db_session)
+        await repo.create(
+            name="hashtest", token_hash="hash_by_hash6", prefix="wm_7", scopes={}, user_id=user_id
+        )
+        found = await repo.get_by_hash("hash_by_hash6")
+        assert found is not None
+        assert found.name == "hashtest"
+
+    async def test_get_by_hash_revoked_returns_none(self, db_session: AsyncSession) -> None:
+        user_id = await self._make_user(db_session, "7")
+        repo = SqlApiTokenRepository(db_session)
+        tok = await repo.create(
+            name="revokedtest",
+            token_hash="hash_revoked7",
+            prefix="wm_8",
+            scopes={},
+            user_id=user_id,
+        )
+        await repo.revoke(tok.id)
+        await db_session.commit()
+        found = await repo.get_by_hash("hash_revoked7")
+        assert found is None
+
+    async def test_machine_delete_nullifies_token_machine_id(
+        self, db_session: AsyncSession
+    ) -> None:
+        """ON DELETE SET NULL: deleting a machine should null out token.machine_id."""
+        user_id = await self._make_user(db_session, "8")
+        machine_id = await self._make_machine(db_session, "8")
+        token_repo = SqlApiTokenRepository(db_session)
+        tok = await token_repo.create(
+            name="setnull",
+            token_hash="hash_setnull8",
+            prefix="wm_9",
+            scopes={},
+            user_id=user_id,
+            machine_id=machine_id,
+        )
+        assert tok.machine_id == machine_id
+
+        # Delete the machine
+        machine_repo = SqlMachineRepository(db_session)
+        await machine_repo.delete(machine_id)
+        await db_session.commit()
+
+        # Token should still exist but machine_id nulled
+        found = await token_repo.get_by_hash("hash_setnull8")
+        assert found is not None
+        assert found.machine_id is None
