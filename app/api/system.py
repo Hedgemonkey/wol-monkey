@@ -1,9 +1,12 @@
-"""System information endpoints (unauthenticated — read-only, no secrets)."""
+"""System information endpoints (unauthenticated — read-only, no secrets).
+
+All data is read from /host/proc/net/* (bind-mounted from host PID 1's network
+namespace in docker-compose) so it reflects the real host interfaces, not the
+container's isolated namespace.  Falls back to /proc/net/* for local dev.
+"""
 
 from __future__ import annotations
 
-import fcntl
-import os
 import re
 import socket
 import struct
@@ -13,55 +16,21 @@ from pydantic import BaseModel
 
 router = APIRouter(tags=["system"])
 
-# IFF flags from linux/if.h
-_IFF_UP = 0x1
-_IFF_LOOPBACK = 0x8
-_IFF_POINTTOPOINT = 0x10
-_IFF_RUNNING = 0x40
+# Paths: prefer host-mounted namespace, fall back for local dev
+_PROC_NET = "/host/proc/net"
+_PROC_NET_FALLBACK = "/proc/net"
 
 
-def _read(path: str) -> str:
-    try:
-        with open(path) as fh:
-            return fh.read().strip()
-    except OSError:
-        return ""
-
-
-def _classify(name: str) -> str:
-    """Return interface type label based on name and sysfs attributes."""
-    if name.startswith("lo"):
-        return "loopback"
-    if name.startswith("veth"):
-        return "veth"
-    if name.startswith("docker") or name.startswith("br-"):
-        return "docker-bridge"
-    if name.startswith("hassio") or name.startswith("virbr"):
-        return "bridge"
-    wireless_path = f"/sys/class/net/{name}/wireless"
-    if os.path.isdir(wireless_path):
-        return "wifi"
-    if os.path.isdir(f"/sys/class/net/{name}/bridge"):
-        return "bridge"
-    return "ethernet"
-
-
-_SIOCGIFADDR = 0x8915
-
-
-def _get_ip_addresses(name: str) -> list[str]:
-    """Return the primary IPv4 address for an interface using ioctl."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        ifreq = struct.pack("16sH14s", name.encode(), socket.AF_INET, b"\x00" * 14)
-        res = fcntl.ioctl(s.fileno(), _SIOCGIFADDR, ifreq)
-        s.close()
-        ip = socket.inet_ntoa(res[20:24])
-        if ip and ip != "0.0.0.0":
-            return [ip]
-    except OSError:
-        pass
-    return []
+def _proc(filename: str) -> str:
+    """Return the first readable path for a /proc/net file."""
+    for base in (_PROC_NET, _PROC_NET_FALLBACK):
+        path = f"{base}/{filename}"
+        try:
+            with open(path) as fh:
+                return fh.read()
+        except OSError:
+            continue
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -81,71 +50,182 @@ class DiscoveredHost(BaseModel):
     ip_address: str
     mac_address: str
     interface: str
-    flags: str
+    is_reachable: bool
+    is_wireless: bool
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Parsing helpers
+# ---------------------------------------------------------------------------
+
+def _parse_dev_names() -> list[str]:
+    """Return interface names from /proc/net/dev (always present)."""
+    names: list[str] = []
+    for line in _proc("dev").splitlines()[2:]:  # skip 2-line header
+        name = line.split(":")[0].strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def _parse_wireless_names() -> set[str]:
+    """Return set of wireless interface names from /proc/net/wireless."""
+    names: set[str] = set()
+    for line in _proc("wireless").splitlines()[2:]:  # skip 2-line header
+        parts = line.split(":")
+        if parts:
+            names.add(parts[0].strip())
+    return names
+
+
+def _route_hex_to_be_int(h: str) -> int:
+    """Route table stores IPs as LE hex; swap bytes to get BE int for inet_aton comparison."""
+    return struct.unpack(">I", struct.pack("<I", int(h, 16)))[0]
+
+
+def _parse_iface_ips() -> dict[str, list[str]]:
+    """Return {iface: [ip, ...]} by parsing /proc/net/fib_trie for LOCAL /32 hosts.
+
+    Walk fib_trie to find each /32 host LOCAL address, then correlate with
+    the route table to assign addresses to interfaces.
+    """
+    # Step 1: collect all LOCAL /32 IPs from fib_trie
+    local_ips: set[str] = set()
+    content = _proc("fib_trie")
+    lines = content.splitlines()
+    prev_ip: str | None = None
+    for line in lines:
+        m = re.match(r"\s+\|--\s+(\d+\.\d+\.\d+\.\d+)", line)
+        if m:
+            prev_ip = m.group(1)
+            continue
+        if prev_ip and "/32 host LOCAL" in line:
+            local_ips.add(prev_ip)
+            prev_ip = None
+            continue
+        prev_ip = None
+
+    # Step 2: assign IPs to interfaces via route table
+    # route table gives us iface -> network/mask; if LOCAL IP is in that subnet → assign
+    iface_nets: list[tuple[str, int, int]] = []  # (iface, net_be, mask_be)
+    for line in _proc("route").splitlines()[1:]:
+        parts = line.split()
+        if len(parts) < 8:
+            continue
+        iface, dest_hex, _gw, flags_hex, _, _, _, mask_hex = parts[:8]
+        try:
+            flags = int(flags_hex, 16)
+            if not (flags & 0x1):  # route must be up
+                continue
+            net_be = _route_hex_to_be_int(dest_hex)
+            mask_be = _route_hex_to_be_int(mask_hex)
+            iface_nets.append((iface, net_be, mask_be))
+        except (ValueError, struct.error):
+            continue
+
+    # Most specific mask first — /32 before /24 before /16 before default /0
+    iface_nets.sort(key=lambda t: bin(t[2]).count("1"), reverse=True)
+
+    result: dict[str, list[str]] = {}
+    for ip in local_ips:
+        if ip.startswith("127.") or ip.endswith(".0") or ip.endswith(".255"):
+            continue
+        try:
+            ip_be = struct.unpack(">I", socket.inet_aton(ip))[0]
+        except OSError:
+            continue
+        for iface, net_be, mask_be in iface_nets:
+            if (ip_be & mask_be) == (net_be & mask_be):
+                result.setdefault(iface, []).append(ip)
+                break
+
+    return result
+
+
+def _classify(name: str, wireless_names: set[str]) -> str:
+    if name == "lo" or name.startswith("lo:"):
+        return "loopback"
+    if name.startswith("veth"):
+        return "veth"
+    if name.startswith("docker") or name.startswith("br-"):
+        return "docker-bridge"
+    if name.startswith("hassio") or name.startswith("virbr"):
+        return "bridge"
+    if name in wireless_names:
+        return "wifi"
+    return "ethernet"
+
+
+def _parse_flags() -> dict[str, int]:
+    """Read IFF flags from /proc/net/dev_snmp6 fallback via if_flags if available,
+    otherwise derive up/running from traffic counters in /proc/net/dev."""
+    # /proc/net/dev doesn't carry flags directly.
+    # Use /sys/class/net/{name}/flags if accessible (may work on some mounts),
+    # otherwise infer: interface is 'up' if it appears in the route table,
+    # 'running' if it has non-zero rx OR tx packet counts.
+    flags: dict[str, int] = {}
+
+    # Collect ifaces that appear in route table (= configured/up)
+    routed: set[str] = set()
+    for line in _proc("route").splitlines()[1:]:
+        parts = line.split()
+        if parts:
+            routed.add(parts[0])
+
+    # Loopback is always up
+    routed.add("lo")
+
+    # Parse traffic counters from /proc/net/dev
+    for line in _proc("dev").splitlines()[2:]:
+        if ":" not in line:
+            continue
+        name, rest = line.split(":", 1)
+        name = name.strip()
+        parts = rest.split()
+        if len(parts) < 9:
+            continue
+        rx_packets = int(parts[1])
+        tx_packets = int(parts[9])
+        is_up = name in routed
+        is_running = rx_packets > 0 or tx_packets > 0
+        flags[name] = (0x1 if is_up else 0) | (0x40 if is_running else 0) | (0x8 if name == "lo" else 0)
+
+    return flags
+
+
+
+# ---------------------------------------------------------------------------
+# Public helpers
 # ---------------------------------------------------------------------------
 def _list_interfaces() -> list[NetworkInterface]:
-    """Read network interfaces from /sys/class/net (Linux)."""
+    wireless = _parse_wireless_names()
+    flags_map = _parse_flags()
+    ip_map = _parse_iface_ips()
+
     interfaces: list[NetworkInterface] = []
-    try:
-        names = sorted(os.listdir("/sys/class/net"))
-    except OSError:
-        return interfaces
-
-    for name in names:
-        base = f"/sys/class/net/{name}"
-        flags_raw = _read(f"{base}/flags")
-        try:
-            flags = int(flags_raw, 16)
-        except ValueError:
-            flags = 0
-
-        mac = _read(f"{base}/address")
-        itype = _classify(name)
-        ips = _get_ip_addresses(name)
-
+    for name in _parse_dev_names():
+        flags = flags_map.get(name, 0)
+        itype = _classify(name, wireless)
         interfaces.append(
             NetworkInterface(
                 name=name,
                 type=itype,
-                is_loopback=bool(flags & _IFF_LOOPBACK),
-                is_up=bool(flags & _IFF_UP),
-                is_running=bool(flags & _IFF_RUNNING),
-                mac_address=mac,
-                ip_addresses=ips,
+                is_loopback=bool(flags & 0x8),
+                is_up=bool(flags & 0x1),
+                is_running=bool(flags & 0x40),
+                mac_address="",
+                ip_addresses=ip_map.get(name, []),
             )
         )
-
     return interfaces
 
 
-# /host/proc/net is mounted from host PID 1 in docker-compose (read-only).
-# Fall back to /proc/net/arp for local development outside Docker.
-_ARP_PATHS = ["/host/proc/net/arp", "/proc/net/arp"]
-
-
 def _discover_hosts() -> list[DiscoveredHost]:
-    """Parse the host kernel ARP table for known LAN hosts.
-
-    Flags 0x2 = complete/reachable entry.
-    Incomplete entries (all-zero MAC) are skipped.
-    """
+    """Parse the host kernel ARP table for known LAN hosts."""
+    wireless = _parse_wireless_names()
     hosts: list[DiscoveredHost] = []
-    lines: list[str] = []
-    for path in _ARP_PATHS:
-        try:
-            with open(path) as fh:
-                lines = fh.readlines()[1:]  # skip header
-            break
-        except OSError:
-            continue
-    if not lines:
-        return hosts
 
-    for line in lines:
+    for line in _proc("arp").splitlines()[1:]:
         parts = re.split(r"\s+", line.strip())
         if len(parts) < 6:
             continue
@@ -157,7 +237,8 @@ def _discover_hosts() -> list[DiscoveredHost]:
                 ip_address=ip,
                 mac_address=mac.lower(),
                 interface=iface,
-                flags=flags,
+                is_reachable=flags == "0x2",
+                is_wireless=iface in wireless,
             )
         )
 
@@ -171,7 +252,7 @@ def _discover_hosts() -> list[DiscoveredHost]:
 @router.get(
     "/system/interfaces",
     response_model=list[NetworkInterface],
-    summary="List host network interfaces with type, MAC and IP",
+    summary="List host network interfaces with type and IP",
 )
 async def list_interfaces() -> list[NetworkInterface]:
     return _list_interfaces()
@@ -183,11 +264,10 @@ async def list_interfaces() -> list[NetworkInterface]:
     summary="Return LAN hosts from kernel ARP cache (no scan required)",
 )
 async def discover_hosts() -> list[DiscoveredHost]:
-    """Read the host kernel ARP table via /proc/net/arp.
+    """Read the host kernel ARP table.
 
-    Returns hosts that have communicated with this machine recently.
-    No network scan is performed — entries reflect the OS ARP cache.
-    The target machine must be online and have been reached at least once
-    (e.g. after a ping) to appear here.
+    Returns hosts the machine has communicated with recently.
+    No scan is performed — entries reflect the OS ARP cache only.
+    A device must be online and reachable to appear here.
     """
     return _discover_hosts()
