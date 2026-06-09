@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}WoL-Monkey{% endblock %} — WoL-Monkey</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body class="h-full bg-gray-50 text-gray-900 antialiased">
+
+  {% block header %}
+  <header class="bg-indigo-700 text-white shadow">
+    <div class="mx-auto max-w-5xl flex items-center justify-between px-4 py-3">
+      <a href="/" class="flex items-center gap-2 font-bold text-lg tracking-tight">
+        <span class="text-2xl">🐒</span> WoL-Monkey
+      </a>
+      <nav class="flex items-center gap-4 text-sm">
+        <a href="/machines" class="hover:underline">Machines</a>
+        <a href="/settings" class="hover:underline">Settings</a>
+        <form method="post" action="/auth/logout" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token | default('') }}" />
+          <button type="submit" class="hover:underline">Sign out</button>
+        </form>
+      </nav>
+    </div>
+  </header>
+  {% endblock %}
+
+  <main class="mx-auto max-w-5xl px-4 py-8">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="mb-4 rounded px-4 py-2 text-sm
+            {% if category == 'error' %}bg-red-100 text-red-800
+            {% elif category == 'success' %}bg-green-100 text-green-800
+            {% else %}bg-blue-100 text-blue-800{% endif %}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

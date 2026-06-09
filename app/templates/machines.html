@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Machines{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">Machines</h1>
+  <a href="/machines/new"
+     class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 transition-colors">
+    + Add machine
+  </a>
+</div>
+
+{% if machines %}
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  {% for machine in machines %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-3">
+    <div class="flex items-start justify-between">
+      <div>
+        <h2 class="font-semibold text-gray-900">{{ machine.name }}</h2>
+        <p class="text-xs text-gray-500 mt-0.5">{{ machine.ip_address }}</p>
+      </div>
+      <span id="status-{{ machine.id }}"
+            class="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full
+                   bg-gray-100 text-gray-600">
+        <span class="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block"></span>
+        Unknown
+      </span>
+    </div>
+
+    <dl class="text-xs text-gray-500 grid grid-cols-2 gap-x-2 gap-y-1">
+      <dt class="font-medium text-gray-700">MAC</dt>
+      <dd class="font-mono">{{ machine.mac_address }}</dd>
+      <dt class="font-medium text-gray-700">Strategy</dt>
+      <dd>{{ machine.wake_strategy }}</dd>
+      <dt class="font-medium text-gray-700">SSH port</dt>
+      <dd>{{ machine.ssh_port }}</dd>
+    </dl>
+
+    <div class="flex gap-2 mt-auto pt-2 border-t border-gray-50">
+      <button
+        data-machine-id="{{ machine.id }}"
+        data-csrf="{{ csrf_token }}"
+        class="wake-btn flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white
+               text-xs font-semibold py-1.5 transition-colors"
+      >
+        Wake
+      </button>
+      <button
+        data-machine-id="{{ machine.id }}"
+        class="probe-btn flex-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700
+               text-xs font-semibold py-1.5 transition-colors"
+      >
+        Probe
+      </button>
+      <a href="/machines/{{ machine.id }}/edit"
+         class="flex-1 text-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700
+                text-xs font-semibold py-1.5 transition-colors">
+        Edit
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-20 text-gray-400">
+  <p class="text-5xl mb-4">🖥️</p>
+  <p class="font-medium">No machines yet.</p>
+  <p class="text-sm mt-1">
+    <a href="/machines/new" class="text-indigo-600 hover:underline">Add your first machine →</a>
+  </p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.wake-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const mid = btn.dataset.machineId;
+    const csrf = btn.dataset.csrf;
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    try {
+      const r = await fetch(`/api/machines/${mid}/wake`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf},
+        body: JSON.stringify({ensure_online: false}),
+      });
+      const data = await r.json();
+      btn.textContent = r.ok ? '✓ Sent' : '✗ Error';
+      setTimeout(() => { btn.textContent = 'Wake'; btn.disabled = false; }, 3000);
+      if (r.ok) pollStatus(mid, data.attempt_id, csrf);
+    } catch {
+      btn.textContent = '✗ Error';
+      btn.disabled = false;
+    }
+  });
+});
+
+document.querySelectorAll('.probe-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const mid = btn.dataset.machineId;
+    btn.disabled = true;
+    btn.textContent = 'Probing…';
+    try {
+      const r = await fetch(`/api/machines/${mid}/status`);
+      const data = await r.json();
+      const el = document.getElementById(`status-${mid}`);
+      const dot = el.querySelector('span');
+      const stateMap = {online: ['bg-green-400','Online'], offline: ['bg-red-400','Offline'], unknown: ['bg-gray-400','Unknown']};
+      const [cls, label] = stateMap[data.state] || stateMap.unknown;
+      dot.className = `w-1.5 h-1.5 rounded-full ${cls} inline-block`;
+      el.lastChild.textContent = label;
+    } finally {
+      btn.textContent = 'Probe';
+      btn.disabled = false;
+    }
+  });
+});
+
+async function pollStatus(mid, attemptId, csrf) {
+  const el = document.getElementById(`status-${mid}`);
+  for (let i = 0; i < 24; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    const r = await fetch(`/api/machines/${mid}/attempts/${attemptId}`);
+    if (!r.ok) break;
+    const data = await r.json();
+    const dot = el.querySelector('span');
+    if (data.status === 'online') {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-green-400 inline-block';
+      el.lastChild.textContent = 'Online';
+      break;
+    } else if (['failed','timeout'].includes(data.status)) {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-red-400 inline-block';
+      el.lastChild.textContent = data.status;
+      break;
+    } else {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse inline-block';
+      el.lastChild.textContent = 'Waking…';
+    }
+  }
+}
+</script>
+{% endblock %}

@@ -1,19 +1,24 @@
 """WoL-Monkey application factory."""
 
 import logging
+import pathlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.machines import router as machines_router
 from app.api.setup import router as setup_router
 from app.api.wake import router as wake_router
+from app.api.web import router as web_router
 from app.config import get_settings
+
+_STATIC_DIR = pathlib.Path(__file__).parent / "static"
 
 logger = structlog.get_logger(__name__)
 
@@ -53,6 +58,10 @@ def create_app() -> FastAPI:
     app.include_router(setup_router, prefix="/api")
     app.include_router(machines_router, prefix="/api")
     app.include_router(wake_router, prefix="/api")
+    app.include_router(web_router)
+
+    # Static files (CSS / JS)
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
     return app
 
