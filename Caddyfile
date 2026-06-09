@@ -1,20 +1,57 @@
-# Caddyfile for WoL-Monkey
-# Replace wol.example.com with your actual domain (or use a local hostname).
-# Caddy will automatically obtain and renew a TLS certificate.
+# ──────────────────────────────────────────────────────────────────────────────
+# WoL-Monkey — Caddyfile (reference / committed version)
+#
+# DO NOT put your real domain or IP in this file — it is public.
+# Instead, create a Caddyfile.local (gitignored) with your real hostname
+# and mount it via docker-compose.override.yml:
+#
+#   services:
+#     caddy:
+#       volumes:
+#         - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+#         - caddy_data:/data
+#         - caddy_config:/config
+#
+# Caddy will automatically obtain and renew a Let's Encrypt TLS certificate
+# as long as ports 80 and 443 are reachable from the internet and your DNS
+# A record points to this machine's public IP.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Global options
+{
+    # Email for Let's Encrypt notifications (replace in Caddyfile.local)
+    email admin@example.com
+
+    # Disable the Caddy admin API endpoint from being publicly accessible
+    admin off
+}
 
 wol.example.com {
+    # Reverse proxy to the app container (localhost-only on port 8000)
     reverse_proxy app:8000 {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto {scheme}
+
+        # Health check — Caddy will stop sending traffic if app is down
+        health_uri /api/health
+        health_interval 15s
     }
 
     # Security headers
     header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options nosniff
         X-Frame-Options DENY
         Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
         -Server
+    }
+
+    # Access log (writes to stdout — visible via docker logs)
+    log {
+        output stdout
+        format json
+        level INFO
     }
 }
