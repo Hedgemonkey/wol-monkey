@@ -48,4 +48,4 @@ EXPOSE 8000
 # Default: API server.
 # For the worker, override CMD in docker-compose.yml.
 CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", \
-     "-b", "0.0.0.0:8000", "-w", "2", "--timeout", "120", "app.main:app"]
+     "-b", "0.0.0.0:8000", "-w", "1", "--timeout", "120", "app.main:app"]

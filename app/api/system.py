@@ -1,4 +1,4 @@
-"""System information endpoints (unauthenticated — read-only, no secrets).
+"""System information endpoints — authentication required.
 
 All data is read from /host/proc/net/* (bind-mounted from host PID 1's network
 namespace in docker-compose) so it reflects the real host interfaces, not the
@@ -13,6 +13,8 @@ import struct
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+from app.security.dependencies import CurrentUser  # noqa: TC001
 
 router = APIRouter(tags=["system"])
 
@@ -254,7 +256,7 @@ def _discover_hosts() -> list[DiscoveredHost]:
     response_model=list[NetworkInterface],
     summary="List host network interfaces with type and IP",
 )
-async def list_interfaces() -> list[NetworkInterface]:
+async def list_interfaces(_user: CurrentUser) -> list[NetworkInterface]:
     return _list_interfaces()
 
 
@@ -263,7 +265,7 @@ async def list_interfaces() -> list[NetworkInterface]:
     response_model=list[DiscoveredHost],
     summary="Return LAN hosts from kernel ARP cache (no scan required)",
 )
-async def discover_hosts() -> list[DiscoveredHost]:
+async def discover_hosts(_user: CurrentUser) -> list[DiscoveredHost]:
     """Read the host kernel ARP table.
 
     Returns hosts the machine has communicated with recently.

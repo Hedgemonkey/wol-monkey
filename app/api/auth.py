@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import time
+from collections import defaultdict
+from threading import Lock
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -30,6 +33,29 @@ DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
+
+# ---------------------------------------------------------------------------
+# Login rate limiter — 5 attempts per IP per 60 seconds (in-process)
+# ---------------------------------------------------------------------------
+_LOGIN_WINDOW = 60
+_LOGIN_MAX_ATTEMPTS = 5
+
+_rate_lock = Lock()
+_rate_buckets: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_login_rate(ip: str) -> None:
+    now = time.monotonic()
+    with _rate_lock:
+        timestamps = _rate_buckets[ip]
+        _rate_buckets[ip] = [t for t in timestamps if now - t < _LOGIN_WINDOW]
+        if len(_rate_buckets[ip]) >= _LOGIN_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many login attempts — please wait before trying again.",
+                headers={"Retry-After": str(_LOGIN_WINDOW)},
+            )
+        _rate_buckets[ip].append(now)
 
 
 # ---------------------------------------------------------------------------
@@ -81,12 +107,14 @@ async def login(
     response: Response,
     db: DbSession,
 ) -> LoginResponse:
+    ip = request.client.host if request.client else "unknown"
+    _check_login_rate(ip)
+
     auth_svc = get_auth_service(
         user_repo=SqlUserRepository(db),
         session_repo=SqlSessionRepository(db),
         token_repo=SqlApiTokenRepository(db),
     )
-    ip = request.client.host if request.client else None
     ua = request.headers.get("user-agent")
     try:
         session = await auth_svc.login(
