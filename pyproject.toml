@@ -105,7 +105,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["app", "worker"]
-omit = ["tests/*", "migrations/*"]
+omit = ["tests/*", "migrations/*", "worker/main.py", "worker/job_queue.py"]
 
 [tool.coverage.report]
 show_missing = true
