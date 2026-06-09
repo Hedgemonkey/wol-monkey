@@ -109,7 +109,9 @@ def create_app() -> FastAPI:
     @app.exception_handler(404)
     async def not_found_handler(request: Request, exc: Exception) -> HTMLResponse:
         if request.url.path.startswith("/api/"):
-            return Response(content='{"detail":"Not found"}', status_code=404, media_type="application/json")
+            return Response(
+                content='{"detail":"Not found"}', status_code=404, media_type="application/json"
+            )
         return _templates.TemplateResponse(
             request,
             "error.html",

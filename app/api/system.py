@@ -64,6 +64,7 @@ class DiscoveredHost(BaseModel):
 # Parsing helpers
 # ---------------------------------------------------------------------------
 
+
 def _parse_dev_names() -> list[str]:
     """Return interface names from /proc/net/dev (always present)."""
     names: list[str] = []
@@ -194,10 +195,11 @@ def _parse_flags() -> dict[str, int]:
         tx_packets = int(parts[9])
         is_up = name in routed
         is_running = rx_packets > 0 or tx_packets > 0
-        flags[name] = (0x1 if is_up else 0) | (0x40 if is_running else 0) | (0x8 if name == "lo" else 0)
+        flags[name] = (
+            (0x1 if is_up else 0) | (0x40 if is_running else 0) | (0x8 if name == "lo" else 0)
+        )
 
     return flags
-
 
 
 # ---------------------------------------------------------------------------

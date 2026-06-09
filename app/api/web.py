@@ -373,9 +373,11 @@ async def machine_edit_post(
         return _redirect("/login")
     repo = SqlMachineRepository(db)
     csrf = await _get_csrf(request, db)
+
     # Sanitise fields — empty string or literal "None" -> None
     def _clean(v: str) -> str | None:
         return v.strip() or None if v.strip() not in ("", "None") else None
+
     try:
         updated = await repo.update(
             machine_id,
