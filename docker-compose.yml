@@ -59,7 +59,7 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "0.0.0.0:8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - /sys/class/net:/sys/class/net:ro
       - /proc/1/net:/host/proc/net:ro
