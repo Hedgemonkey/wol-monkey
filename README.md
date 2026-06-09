@@ -229,6 +229,33 @@ python tests/_security_audit.py
 
 ---
 
+## SSH Auto-Wake
+
+Connect your IDE or terminal directly to a sleeping machine — WoL-Monkey wakes
+it automatically before SSH establishes the connection.
+
+Uses SSH's `ProxyCommand` to call the API before each connection. If the
+machine is already online the overhead is a single HTTP request (~5 ms). If
+it's sleeping, the magic packet is sent and SSH waits until TCP/SSH responds
+before proceeding.
+
+Works with **VS Code Remote-SSH**, **Windsurf**, **Cursor**, **JetBrains
+Gateway**, and plain `ssh` / `scp` / `rsync`.
+
+```ssh-config
+# ~/.ssh/config
+Host my-machine
+    HostName 192.168.1.50
+    User youruser
+    ProxyCommand wol-wake <machine-uuid> %h %p
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+```
+
+**→ Full setup guide: [docs/guides/ssh-auto-wake.md](docs/guides/ssh-auto-wake.md)**
+
+---
+
 ## Contributing
 
 PRs welcome. Please follow the commit discipline (Conventional Commits, multi-line bodies for non-trivial changes).
