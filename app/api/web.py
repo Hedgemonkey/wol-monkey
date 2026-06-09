@@ -127,7 +127,22 @@ async def setup_admin_post(
         )
     setup_svc = SetupStateService(SqlSetupStateRepository(db))
     await setup_svc.advance("admin_account")
-    return _redirect("/setup/network")
+
+    # Auto-login so the session cookie is set before the network step,
+    # which needs auth to fetch /api/system/interfaces.
+    ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent")
+    session = await auth_svc.login(username=username, password=password, ip=ip, user_agent=ua)
+    resp = _redirect("/setup/network")
+    resp.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session.id,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        max_age=SESSION_LIFETIME_HOURS * 3600,
+    )
+    return resp
 
 
 @router.post("/setup/network", response_class=HTMLResponse)
