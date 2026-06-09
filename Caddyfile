@@ -1,0 +1,20 @@
+# Caddyfile for WoL-Monkey
+# Replace wol.example.com with your actual domain (or use a local hostname).
+# Caddy will automatically obtain and renew a TLS certificate.
+
+wol.example.com {
+    reverse_proxy app:8000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+}

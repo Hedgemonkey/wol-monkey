@@ -23,37 +23,143 @@
 
 ## Quick Start
 
+### Prerequisites
+
+- Docker Engine ≥ 24 + Docker Compose plugin
+- A machine on the **same Layer-2 network** as the targets (for `etherwake`), or any networked
+  host for UDP broadcast mode.
+
+### 1 — Clone and configure
+
 ```bash
-cp deploy/.env.example .env
-# Edit .env — set DATABASE_URL and generate a strong APP_SECRET
-docker compose -f deploy/docker-compose.yml up -d
-# Open http://localhost in your browser and follow the setup wizard
+git clone https://github.com/Hedgemonkey/wol-monkey.git
+cd wol-monkey
+cp .env.example .env
 ```
+
+Edit `.env` and fill in at minimum:
+
+| Variable | Description |
+|---|---|
+| `POSTGRES_PASSWORD` | Strong password for the database |
+| `APP_SECRET` | 64-byte hex secret — `python3 -c "import secrets; print(secrets.token_hex(64))"` |
+
+### 2 — Start the stack
+
+```bash
+# API + worker + Postgres (without Caddy TLS — suitable for LAN/Tailscale)
+docker compose up -d app worker db
+
+# With Caddy HTTPS (edit Caddyfile hostname first)
+docker compose --profile caddy up -d
+```
+
+### 3 — Open the setup wizard
+
+Navigate to `http://<host>:8000` (or your Caddy domain) and follow the five-step wizard:
+
+1. **Welcome**
+2. **Create admin account** — username + password (12+ chars)
+3. **Network config** — wake interface, default strategy, poll timeout
+4. **Add first machine** — or skip and add later from the dashboard
+5. **Complete** 🎉
+
+---
+
+## API Reference
+
+All endpoints are under `/api/`.  Swagger UI is available at `/api/docs`.
+
+### Authentication
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/auth/login` | — | Form login, returns session cookie |
+| `POST` | `/auth/logout` | Session | Revoke current session |
+| `GET` | `/auth/me` | Session / Token | Current user info |
+| `POST` | `/auth/tokens` | Session + CSRF | Create API token |
+| `GET` | `/auth/tokens` | Session | List active tokens |
+| `DELETE` | `/auth/tokens/{id}` | Session + CSRF | Revoke a token |
+
+### Machines
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/machines` | Session / Token | List machines |
+| `POST` | `/machines` | Session + CSRF | Create machine |
+| `GET` | `/machines/{id}` | Session / Token | Get machine |
+| `PATCH` | `/machines/{id}` | Session + CSRF | Update machine |
+| `DELETE` | `/machines/{id}` | Session + CSRF | Delete machine |
+| `POST` | `/machines/{id}/wake` | Session + CSRF | Queue wake job |
+| `POST` | `/machines/{id}/wake/direct` | API Token | Direct wake (needs CAP_NET_RAW) |
+| `GET` | `/machines/{id}/attempts/{aid}` | Session / Token | Poll attempt status |
+| `GET` | `/machines/{id}/status` | Session / Token | Live ping + TCP probe |
+
+### Setup Wizard
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/setup/status` | — | Current wizard state |
+| `POST` | `/setup/admin` | — | Create admin (wizard step 2) |
+| `POST` | `/setup/network` | — | Save network config |
+| `POST` | `/setup/complete` | — | Mark wizard done |
+
+---
+
+## Configuration
+
+All configuration is via environment variables (`.env`).  
+User-facing settings (wake interface, strategy defaults, session lifetime) are stored in
+the database and managed via the **Settings** page.
+
+| Variable | Default | Description |
+|---|---|---|
+| `DATABASE_URL` | — | `postgresql+asyncpg://user:pass@host/db` |
+| `APP_SECRET` | — | CSRF / token signing secret (required in prod) |
+| `LOG_LEVEL` | `info` | Python log level |
+| `POSTGRES_USER` | `wol` | DB username (docker-compose only) |
+| `POSTGRES_PASSWORD` | — | DB password (docker-compose only) |
+| `POSTGRES_DB` | `wolmonkey` | DB name (docker-compose only) |
+
+---
+
+## Wake Strategies
+
+| Strategy | How it works | Requirements |
+|---|---|---|
+| `etherwake` | Layer-2 raw socket via `etherwake` binary | `CAP_NET_RAW`, same L2 segment |
+| `udp` | UDP broadcast to port 9 | None — works across routed subnets with directed broadcast |
+
+The worker container uses `network_mode: host` and `cap_add: [NET_RAW]` for `etherwake`.
+If you use UDP-only, you can remove those from `docker-compose.yml`.
 
 ---
 
 ## Architecture
 
-See [`docs/architecture/`](docs/architecture/) for full ADRs and diagrams.
-
-**Stack:** FastAPI · SQLAlchemy 2.x · Alembic · PostgreSQL · Caddy · Docker Compose · pytest · Playwright
+**Stack:** Python 3.12 · FastAPI · SQLAlchemy 2.x async · Alembic · PostgreSQL 16 · Caddy · Docker Compose
 
 **Layers:**
 ```
-api/web  →  services  →  domain
-               ↓
-          infra/persistence  (implements ports)
+web/API routes  →  services  →  domain (pure Python)
+                       ↓
+               infra / persistence  (implements ports)
 ```
+
+**Key design decisions:**
+- Domain layer has zero framework imports — trivially testable
+- Wake jobs are queued to the DB and executed by a separate worker with elevated privileges
+- CSRF tokens are scoped to the session's `csrf_secret` — rotating on logout
+- Passwords use Argon2id; API tokens are SHA-256 hashed at rest
 
 ---
 
 ## Deployment Guides
 
-- [Local-only deployment](docs/guides/local.md)
-- [Tailscale / private network](docs/guides/tailscale.md)
-- [Direct exposure behind Caddy](docs/guides/direct-exposure.md)
-- [Backup & restore](docs/guides/backup.md)
-- [Upgrading](docs/guides/upgrade.md)
+- **Local LAN** — `docker compose up -d app worker db` then access `http://<host>:8000`
+- **Tailscale** — same as LAN, expose via Tailscale IP
+- **Public with TLS** — edit `Caddyfile`, run with `--profile caddy`
+- **Upgrading** — `git pull && docker compose up -d --build` then migrations auto-run
 
 ---
 
@@ -62,32 +168,37 @@ api/web  →  services  →  domain
 WoL-Monkey is designed secure-by-default:
 
 - No unauthenticated wake actions — ever
-- Session-based UI auth with CSRF protection
-- API tokens stored hashed; shown once on creation
-- Append-only audit log
-- Privileged wake operations isolated in a separate worker container
-- Direct exposure mode includes explicit hardening warnings
-
-See [Security model](docs/architecture/security.md) and [threat model](docs/architecture/threat-model.md) for details.
+- Session-based UI auth with CSRF protection on all mutating endpoints
+- API tokens stored hashed (SHA-256); shown **once** on creation
+- Privileged wake operations isolated in the worker container
+- Caddy provides automatic TLS + modern security headers
 
 ---
 
 ## Developer Workflow
 
 ```bash
-make install          # install deps + playwright browser
-make dev              # run local dev server
-make fmt              # format
-make lint             # lint
-make type             # mypy type check
-make test             # unit + api + security tests
-make test-integration # requires live Postgres
-make test-e2e         # Playwright e2e
-make screenshots      # generate docs screenshots
-make migrate          # run DB migrations
-```
+# Setup
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 
-See [Developer guide](docs/guides/developer.md) for full workflow including `jj` VCS usage.
+# Run linting + type checks
+python -m ruff check . && python -m ruff format .
+python -m mypy app worker
+
+# Run tests (unit + API + security — no DB required)
+python -m pytest -m "not e2e and not integration"
+
+# Run integration tests (requires Docker)
+python -m pytest -m integration
+
+# Start dev server
+DATABASE_URL=... APP_SECRET=... uvicorn app.main:app --reload
+
+# Generate / apply migrations
+alembic revision --autogenerate -m "description"
+alembic upgrade head
+```
 
 ---
 
