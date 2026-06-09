@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import ipaddress
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.machine import WakeStrategy
@@ -21,10 +23,27 @@ DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
+_MAC_RE = re.compile(r"^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$")
+
+
+def _validate_mac(v: str) -> str:
+    if not _MAC_RE.match(v):
+        raise ValueError("Invalid MAC address — expected xx:xx:xx:xx:xx:xx")
+    return v.lower()
+
+
+def _validate_ip(v: str) -> str:
+    try:
+        ipaddress.ip_address(v)
+    except ValueError as exc:
+        raise ValueError(f"Invalid IP address: {v!r}") from exc
+    return v
+
+
 class MachineCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     ip_address: str = Field(min_length=7, max_length=45)
-    mac_address: str = Field(min_length=14, max_length=17)
+    mac_address: str = Field(min_length=17, max_length=17)
     ssh_port: int = Field(default=22, ge=1, le=65535)
     hostname: str | None = Field(default=None, max_length=253)
     wake_interface: str | None = Field(default=None, max_length=32)
@@ -32,11 +51,28 @@ class MachineCreate(BaseModel):
     broadcast_address: str | None = Field(default=None, max_length=45)
     enabled: bool = True
 
+    @field_validator("mac_address")
+    @classmethod
+    def validate_mac(cls, v: str) -> str:
+        return _validate_mac(v)
+
+    @field_validator("ip_address")
+    @classmethod
+    def validate_ip(cls, v: str) -> str:
+        return _validate_ip(v)
+
+    @field_validator("broadcast_address")
+    @classmethod
+    def validate_broadcast(cls, v: str | None) -> str | None:
+        if v is not None:
+            return _validate_ip(v)
+        return v
+
 
 class MachineUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     ip_address: str | None = Field(default=None, min_length=7, max_length=45)
-    mac_address: str | None = Field(default=None, min_length=14, max_length=17)
+    mac_address: str | None = Field(default=None, min_length=17, max_length=17)
     ssh_port: int | None = Field(default=None, ge=1, le=65535)
     hostname: str | None = None
     wake_interface: str | None = None

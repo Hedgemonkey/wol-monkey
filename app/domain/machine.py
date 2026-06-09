@@ -8,7 +8,7 @@ from enum import StrEnum
 
 class WakeStrategy(StrEnum):
     ETHERWAKE = "etherwake"
-    UDP = "udp"
+    UDP_BROADCAST = "udp_broadcast"
 
 
 class MachineState(StrEnum):

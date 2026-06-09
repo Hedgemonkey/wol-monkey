@@ -146,7 +146,7 @@ class TestWakeAttemptRepository:
             machine_id=machine_id,
             actor_type="user",
             actor_id="uid",
-            strategy="udp",
+            strategy="udp_broadcast",
         )
         await repo.update_status(attempt.id, "sent")
         await db_session.commit()

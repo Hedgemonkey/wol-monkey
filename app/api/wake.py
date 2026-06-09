@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.machine import WakeStrategy  # noqa: TC001
 from app.domain.wake_attempt import AttemptStatus
 from app.infra.state_probe import StateProbe
 from app.persistence.database import get_db_session, get_session_factory
@@ -35,7 +36,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 class WakeRequest(BaseModel):
     ensure_online: bool = False
     poll_timeout_s: int = Field(default=120, ge=10, le=600)
-    strategy_override: str | None = None
+    strategy: WakeStrategy | None = None
 
 
 class WakeResponse(BaseModel):
@@ -90,10 +91,12 @@ async def wake_machine(
         machine_id=machine_id,
         actor_type="user",
         actor_id=user.id,
-        strategy=body.strategy_override or machine.wake_strategy,
+        strategy=body.strategy.value if body.strategy else machine.wake_strategy,
         ensure_online=body.ensure_online,
         poll_timeout_s=body.poll_timeout_s,
     )
+    # Commit now so the attempt row is visible to the job queue's separate session
+    await db.commit()
 
     # Enqueue the job for the worker
     factory = get_session_factory()
@@ -107,7 +110,7 @@ async def wake_machine(
             "attempt_id": attempt.id,
             "ensure_online": body.ensure_online,
             "poll_timeout_s": body.poll_timeout_s,
-            "strategy_override": body.strategy_override,
+            "strategy_override": body.strategy.value if body.strategy else None,
             "actor_type": "user",
             "actor_id": user.id,
         },
@@ -145,7 +148,7 @@ async def wake_machine_direct(
             actor_id=token.id,
             ensure_online=body.ensure_online,
             poll_timeout_s=body.poll_timeout_s,
-            strategy_override=body.strategy_override,
+            strategy_override=body.strategy.value if body.strategy else None,
         )
     except WakeError as exc:
         raise HTTPException(

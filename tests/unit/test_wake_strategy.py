@@ -63,14 +63,14 @@ class TestUdpBroadcastStrategy:
         # The broadcast address should be passed to _send_udp_packet
         assert captured[0][1] == "192.168.1.255"
 
-    def test_name_is_udp(self) -> None:
-        assert UdpBroadcastStrategy().name == "udp"
+    def test_name_is_udp_broadcast(self) -> None:
+        assert UdpBroadcastStrategy().name == "udp_broadcast"
 
 
 class TestGetStrategy:
-    def test_get_udp(self) -> None:
-        s = get_strategy("udp")
-        assert s.name == "udp"
+    def test_get_udp_broadcast(self) -> None:
+        s = get_strategy("udp_broadcast")
+        assert s.name == "udp_broadcast"
 
     def test_get_etherwake(self) -> None:
         s = get_strategy("etherwake")

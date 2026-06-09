@@ -28,7 +28,7 @@
       <select name="default_wake_strategy"
               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
         <option value="etherwake" {% if settings.default_wake_strategy == 'etherwake' %}selected{% endif %}>etherwake</option>
-        <option value="udp" {% if settings.default_wake_strategy == 'udp' %}selected{% endif %}>UDP broadcast</option>
+        <option value="udp_broadcast" {% if settings.default_wake_strategy == 'udp_broadcast' %}selected{% endif %}>UDP broadcast</option>
       </select>
     </div>
 

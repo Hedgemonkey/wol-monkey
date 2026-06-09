@@ -10,7 +10,7 @@ from app.domain.wake_attempt import AttemptStatus
 from app.services.wake import WakeError, WakeService
 
 
-def _make_machine(enabled: bool = True, strategy: str = "udp") -> MagicMock:
+def _make_machine(enabled: bool = True, strategy: str = "udp_broadcast") -> MagicMock:
     m = MagicMock()
     m.id = "machine-1"
     m.enabled = enabled
@@ -85,6 +85,6 @@ class TestWakeService:
         with patch("app.services.wake.get_strategy") as mock_get:
             mock_strategy = AsyncMock()
             mock_get.return_value = mock_strategy
-            await svc.wake("machine-1", "user", "uid", strategy_override="udp")
+            await svc.wake("machine-1", "user", "uid", strategy_override="udp_broadcast")
 
-        mock_get.assert_called_once_with("udp")
+        mock_get.assert_called_once_with("udp_broadcast")

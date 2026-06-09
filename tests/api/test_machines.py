@@ -73,7 +73,7 @@ def _auth_overrides(app, user=None, session=None) -> Generator[None, None, None]
         return u
 
     async def _fake_db():
-        yield MagicMock()
+        yield AsyncMock()
 
     app.dependency_overrides[get_current_session_and_user] = _fake_auth
     app.dependency_overrides[get_user_from_session_or_token] = _fake_user_only

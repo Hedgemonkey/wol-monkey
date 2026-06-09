@@ -128,7 +128,7 @@ async def test_setup_network_stores_settings(client: AsyncClient) -> None:
             "/api/setup/network",
             json={
                 "wake_interface": "eth0",
-                "default_wake_strategy": "udp",
+                "default_wake_strategy": "udp_broadcast",
                 "default_poll_timeout_s": 60,
             },
         )

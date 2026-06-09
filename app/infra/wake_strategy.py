@@ -74,7 +74,7 @@ class UdpBroadcastStrategy(WakeStrategyPort):
 
     @property
     def name(self) -> str:
-        return "udp"
+        return "udp_broadcast"
 
     async def wake(self, mac: str, interface: str | None, broadcast: str | None) -> None:
         target = broadcast or _MAGIC_BROADCAST
@@ -96,7 +96,7 @@ def get_strategy(name: str) -> WakeStrategyPort:
     """Return a WakeStrategyPort implementation by strategy name."""
     strategies: dict[str, WakeStrategyPort] = {
         "etherwake": EtherwakeStrategy(),
-        "udp": UdpBroadcastStrategy(),
+        "udp_broadcast": UdpBroadcastStrategy(),
     }
     if name not in strategies:
         raise ValueError(f"Unknown wake strategy: {name!r}. Choose from {list(strategies)}")
