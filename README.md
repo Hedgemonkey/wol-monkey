@@ -245,8 +245,8 @@ Gateway**, and plain `ssh` / `scp` / `rsync`.
 ```ssh-config
 # ~/.ssh/config
 Host my-machine
-    HostName 192.168.1.50
-    User youruser
+    HostName <machine-ip-or-hostname>
+    User <your-username>
     ProxyCommand wol-wake <machine-uuid> %h %p
     ServerAliveInterval 30
     ServerAliveCountMax 3

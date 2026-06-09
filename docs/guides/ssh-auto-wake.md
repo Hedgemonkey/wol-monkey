@@ -23,7 +23,7 @@ slower connection on first connect when the machine was sleeping.
 ## Prerequisites
 
 - WoL-Monkey running and reachable from your client machine
-- An API token with at least read access (create one in **Settings → API Tokens**)
+- An API token with at least read access (create one via **API Tokens** in the nav)
 - `curl` and `jq` installed on the client (`sudo apt install curl jq` /
   `brew install curl jq`)
 
@@ -31,7 +31,7 @@ slower connection on first connect when the machine was sleeping.
 
 ## Step 1 — Create an API token
 
-In the WoL-Monkey UI go to **Settings → API tokens → Create token**.
+In the WoL-Monkey UI go to **API Tokens** (nav link) → pick your machine → **+ Add token**.
 Copy the token — it looks like `wm_abc123_xxxxxxxxxxxxxxxx`.
 
 Store it in your shell environment or directly in the script (see below).
@@ -49,7 +49,7 @@ chmod 600 ~/.config/wol-monkey/token
 
 ```bash
 curl -s -H "Authorization: Bearer $(cat ~/.config/wol-monkey/token)" \
-  http://<wol-monkey-host>:8000/api/machines | jq '.[].id, .[].name'
+  http://<wol-monkey-host>/api/machines | jq '.[].id, .[].name'
 ```
 
 Note the UUID for the machine you want to auto-wake.
@@ -111,21 +111,21 @@ EOF
 ## Step 4 — Configure `~/.ssh/config`
 
 ```ssh-config
-Host fedora-pc
-    HostName 172.24.0.2
-    User youruser
+Host my-machine
+    HostName <machine-ip-or-hostname>
+    User <your-username>
     ProxyCommand wol-wake <machine-uuid> %h %p
 ```
 
 Replace `<machine-uuid>` with the UUID from Step 2.
 
-If WoL-Monkey isn't on `localhost:8000`, add the URL:
+If WoL-Monkey isn't accessible at the default URL, set it explicitly:
 
 ```ssh-config
-Host fedora-pc
-    HostName 172.24.0.2
-    User youruser
-    ProxyCommand env WOL_MONKEY_URL=http://192.168.1.50:8000 wol-wake <uuid> %h %p
+Host my-machine
+    HostName <machine-ip-or-hostname>
+    User <your-username>
+    ProxyCommand env WOL_MONKEY_URL=http://<wol-monkey-host> wol-wake <uuid> %h %p
 ```
 
 ---
@@ -134,7 +134,7 @@ Host fedora-pc
 
 | Variable | Default | Description |
 |---|---|---|
-| `WOL_MONKEY_URL` | `http://localhost:8000` | Base URL of your WoL-Monkey instance |
+| `WOL_MONKEY_URL` | `http://localhost:8000` | Base URL of your WoL-Monkey instance (no trailing slash) |
 | `WOL_MONKEY_TOKEN` | — | API token (takes precedence over file) |
 | `WOL_MONKEY_TOKEN_FILE` | `~/.config/wol-monkey/token` | Path to token file |
 | `WOL_MONKEY_TIMEOUT` | `90` | Seconds to wait for machine to come online |
@@ -155,9 +155,9 @@ entry so the IDE doesn't drop the connection if the machine becomes briefly
 unreachable after waking:
 
 ```ssh-config
-Host fedora-pc
-    HostName 172.24.0.2
-    User youruser
+Host my-machine
+    HostName <machine-ip-or-hostname>
+    User <your-username>
     ProxyCommand wol-wake <machine-uuid> %h %p
     ServerAliveInterval 30
     ServerAliveCountMax 3
@@ -168,13 +168,13 @@ Host fedora-pc
 ## Tailscale / remote access
 
 If WoL-Monkey is only accessible via Tailscale, set `WOL_MONKEY_URL` to your
-Tailscale IP:
+Tailscale address:
 
 ```ssh-config
-Host fedora-pc
-    HostName 100.x.y.z
-    User youruser
-    ProxyCommand env WOL_MONKEY_URL=http://100.a.b.c:8000 wol-wake <uuid> %h %p
+Host my-machine
+    HostName <machine-tailscale-ip>
+    User <your-username>
+    ProxyCommand env WOL_MONKEY_URL=http://<wol-monkey-tailscale-ip> wol-wake <uuid> %h %p
 ```
 
 ---
@@ -193,5 +193,93 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 top of the script (it'll always send a wake packet, which is harmless if the
 machine is already on).
 
-**API returns 401** — check your token hasn't been revoked in
-**Settings → API Tokens**.
+**API returns 401** — check your token hasn't been revoked in **API Tokens** (nav link).
+
+---
+
+## Windows
+
+On Windows, `ProxyCommand` works inside [Git for Windows](https://gitforwindows.org/) bash,
+[WSL2](https://learn.microsoft.com/en-us/windows/wsl/), or with [OpenSSH for Windows](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse).
+
+### Option A — WSL2 (recommended)
+
+Install the script inside your WSL2 distro exactly as above — WSL's `ssh` and `ProxyCommand`
+behave identically to Linux. Your Windows SSH client can delegate to WSL via:
+
+```ssh-config
+Host my-machine
+    HostName <machine-ip-or-hostname>
+    User <your-username>
+    ProxyCommand wsl wol-wake <machine-uuid> %h %p
+```
+
+### Option B — Native PowerShell script
+
+If you use Windows OpenSSH without WSL, save this as
+`%USERPROFILE%\wol-wake.ps1` and store your token in
+`%APPDATA%\wol-monkey\token`:
+
+```powershell
+# wol-wake.ps1 — wake a machine via WoL-Monkey before SSH connects
+# Usage: powershell -File wol-wake.ps1 <machine-id> <ssh-host> <ssh-port>
+param(
+    [Parameter(Mandatory)][string]$MachineId,
+    [Parameter(Mandatory)][string]$SshHost,
+    [string]$SshPort = "22"
+)
+
+$WolBase  = if ($env:WOL_MONKEY_URL)       { $env:WOL_MONKEY_URL }       else { "http://localhost:8000" }
+$TokenFile= if ($env:WOL_MONKEY_TOKEN_FILE){ $env:WOL_MONKEY_TOKEN_FILE } else { "$env:APPDATA\wol-monkey\token" }
+$Token    = if ($env:WOL_MONKEY_TOKEN)     { $env:WOL_MONKEY_TOKEN }     else { (Get-Content $TokenFile -ErrorAction SilentlyContinue) }
+$Timeout  = if ($env:WOL_MONKEY_TIMEOUT)   { $env:WOL_MONKEY_TIMEOUT }   else { 90 }
+
+if (-not $Token) {
+    Write-Error "wol-wake: no API token — set WOL_MONKEY_TOKEN or create $TokenFile"
+    exit 1
+}
+
+$Headers = @{ Authorization = "Bearer $Token" }
+
+try {
+    $Status = Invoke-RestMethod -Uri "$WolBase/api/machines/$MachineId/status" `
+        -Headers $Headers -Method Get
+    if ($Status.state -eq "online") {
+        Write-Host "wol-wake: already online — connecting" -ForegroundColor Green
+    } else {
+        Write-Host "wol-wake: $($Status.state) — sending wake packet..." -ForegroundColor Yellow
+        $Body = "{`"ensure_online`":true,`"poll_timeout_s`":$Timeout}"
+        Invoke-RestMethod -Uri "$WolBase/api/machines/$MachineId/wake/direct" `
+            -Headers $Headers -Method Post `
+            -ContentType "application/json" -Body $Body | Out-Null
+        Write-Host "wol-wake: machine online — connecting" -ForegroundColor Green
+    }
+} catch {
+    Write-Warning "wol-wake: API call failed ($_) — attempting connection anyway"
+}
+
+# Hand off to OpenSSH's built-in nc equivalent
+& "$env:SystemRoot\System32\OpenSSH\ssh.exe" -W "${SshHost}:${SshPort}" localhost
+```
+
+Store your token:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:APPDATA\wol-monkey" | Out-Null
+"wm_your_token_here" | Set-Content "$env:APPDATA\wol-monkey\token" -NoNewline
+```
+
+Add to `%USERPROFILE%\.ssh\config`:
+
+```ssh-config
+Host my-machine
+    HostName <machine-ip-or-hostname>
+    User <your-username>
+    ProxyCommand powershell -File %USERPROFILE%\wol-wake.ps1 <machine-uuid> %h %p
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+```
+
+> **Note:** Windows OpenSSH's `ProxyCommand` runs `.exe` or scripts via `cmd.exe`.
+> If `powershell` is not on `PATH`, use the full path:
+> `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`

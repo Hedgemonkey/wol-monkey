@@ -107,7 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `tests/_security_audit.py`: 74-check live security and functional audit covering
   unauthenticated access, CSRF bypass, MAC/IP/strategy input fuzzing, session revocation,
   UUID injection, content-type confusion, API token isolation, CSRF reuse, live TCP-SSH probe,
-  and wake packet dispatch monitoring against real hardware (Fedora PC at 172.24.0.2)
+  and wake packet dispatch monitoring against real hardware
 
 ---
 

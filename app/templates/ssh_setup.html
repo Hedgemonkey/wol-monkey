@@ -60,25 +60,45 @@
     </div>
   </div>
 
-  {# ── Step 2: install script ────────────────────────────────────────────── #}
+  {# ── Step 2: install script ──────────────────────────────────────────── #}
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
     <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
       Step 2 — Install the <code class="font-mono normal-case">wol-wake</code> script
     </h2>
     <p class="text-sm text-gray-600">
       Run this once on the machine you SSH <em>from</em> (your laptop/desktop).
-      Requires <code class="font-mono bg-gray-100 px-1 rounded">curl</code> and
-      <code class="font-mono bg-gray-100 px-1 rounded">jq</code>
-      (<code class="font-mono bg-gray-100 px-1 rounded">sudo apt install curl jq</code> /
-       <code class="font-mono bg-gray-100 px-1 rounded">brew install curl jq</code>).
     </p>
 
-    <div class="relative">
-      <button onclick="copyBlock('script-block')"
-              class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
-        Copy
+    {# OS tab switcher #}
+    <div class="flex gap-1 border-b border-gray-200">
+      <button id="tab-unix" onclick="switchTab('unix')"
+              class="px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 border-gray-200 bg-indigo-600 text-white -mb-px">
+        Linux / macOS
       </button>
-      <pre id="script-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed">mkdir -p ~/.config/wol-monkey
+      <button id="tab-win-wsl" onclick="switchTab('win-wsl')"
+              class="px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 border-gray-200 bg-white text-gray-600 hover:bg-gray-50 -mb-px">
+        Windows (WSL2)
+      </button>
+      <button id="tab-win-ps" onclick="switchTab('win-ps')"
+              class="px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 border-gray-200 bg-white text-gray-600 hover:bg-gray-50 -mb-px">
+        Windows (PowerShell)
+      </button>
+    </div>
+
+    {# Linux/macOS bash script #}
+    <div id="panel-unix" class="space-y-2">
+      <p class="text-xs text-gray-500">
+        Requires <code class="font-mono bg-gray-100 px-1 rounded">curl</code> and
+        <code class="font-mono bg-gray-100 px-1 rounded">jq</code>
+        (<code class="font-mono bg-gray-100 px-1 rounded">sudo apt install curl jq</code> /
+         <code class="font-mono bg-gray-100 px-1 rounded">brew install curl jq</code>).
+      </p>
+      <div class="relative">
+        <button onclick="copyBlock('script-block')"
+                class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
+          Copy
+        </button>
+        <pre id="script-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed">mkdir -p ~/.config/wol-monkey
 echo "<span id='s-token' class='text-yellow-300'>PASTE_YOUR_TOKEN_HERE</span>" &gt; ~/.config/wol-monkey/token
 chmod 600 ~/.config/wol-monkey/token
 
@@ -110,6 +130,90 @@ exec nc "$SSH_HOST" "$SSH_PORT"
 EOF
 
 echo "Installed. Make sure ~/.local/bin is on your PATH."</pre>
+      </div>
+    </div>
+
+    {# Windows WSL2 #}
+    <div id="panel-win-wsl" class="hidden space-y-2">
+      <p class="text-xs text-gray-500">
+        Install the bash script inside your WSL2 distro exactly as in the Linux tab.
+        Then reference it from your <strong>Windows</strong> SSH config:
+      </p>
+      <div class="relative">
+        <button onclick="copyBlock('wsl-ssh-block')"
+                class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
+          Copy
+        </button>
+        <pre id="wsl-ssh-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed"># %USERPROFILE%\.ssh\config
+Host &lt;host-alias&gt;
+    HostName &lt;machine-ip-or-hostname&gt;
+    User &lt;your-username&gt;
+    ProxyCommand wsl wol-wake &lt;machine-uuid&gt; %h %p
+    ServerAliveInterval 30
+    ServerAliveCountMax 3</pre>
+      </div>
+    </div>
+
+    {# Windows PowerShell #}
+    <div id="panel-win-ps" class="hidden space-y-2">
+      <p class="text-xs text-gray-500">
+        For Windows OpenSSH without WSL. Save as
+        <code class="font-mono bg-gray-100 px-1 rounded">%USERPROFILE%\wol-wake.ps1</code>
+        and store your token in
+        <code class="font-mono bg-gray-100 px-1 rounded">%APPDATA%\wol-monkey\token</code>.
+      </p>
+      <div class="relative">
+        <button onclick="copyBlock('ps-token-block')"
+                class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
+          Copy token store
+        </button>
+        <pre id="ps-token-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre leading-relaxed mb-2">New-Item -ItemType Directory -Force "$env:APPDATA\wol-monkey" | Out-Null
+"<span id='s-token-ps' class='text-yellow-300'>PASTE_YOUR_TOKEN_HERE</span>" | Set-Content "$env:APPDATA\wol-monkey\token" -NoNewline</pre>
+      </div>
+      <div class="relative">
+        <button onclick="copyBlock('ps-script-block')"
+                class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
+          Copy script
+        </button>
+        <pre id="ps-script-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed"># wol-wake.ps1 — save as %USERPROFILE%\wol-wake.ps1
+param(
+    [Parameter(Mandatory)][string]$MachineId,
+    [Parameter(Mandatory)][string]$SshHost,
+    [string]$SshPort = "22"
+)
+$WolBase   = if ($env:WOL_MONKEY_URL)        { $env:WOL_MONKEY_URL }        else { "<span id='s-url-ps' class='text-cyan-300'>{{ base_url }}</span>" }
+$TokenFile = if ($env:WOL_MONKEY_TOKEN_FILE) { $env:WOL_MONKEY_TOKEN_FILE } else { "$env:APPDATA\wol-monkey\token" }
+$Token     = if ($env:WOL_MONKEY_TOKEN)      { $env:WOL_MONKEY_TOKEN }      else { (Get-Content $TokenFile -EA SilentlyContinue) }
+$Timeout   = if ($env:WOL_MONKEY_TIMEOUT)    { $env:WOL_MONKEY_TIMEOUT }    else { 90 }
+if (-not $Token) { Write-Error "wol-wake: no token"; exit 1 }
+$H = @{ Authorization = "Bearer $Token" }
+try {
+    $s = Invoke-RestMethod "$WolBase/api/machines/$MachineId/status" -Headers $H
+    if ($s.state -ne "online") {
+        Write-Host "wol-wake: $($s.state) — waking..." -ForegroundColor Yellow
+        $b = "{`"ensure_online`":true,`"poll_timeout_s`":$Timeout}"
+        Invoke-RestMethod "$WolBase/api/machines/$MachineId/wake/direct" `
+            -Method Post -Headers $H -ContentType "application/json" -Body $b | Out-Null
+        Write-Host "wol-wake: online — connecting" -ForegroundColor Green
+    }
+} catch { Write-Warning "wol-wake: API error — connecting anyway" }
+&amp; "$env:SystemRoot\System32\OpenSSH\ssh.exe" -W "${SshHost}:${SshPort}" localhost</pre>
+      </div>
+      <p class="text-xs text-gray-500">
+        SSH config entry for Windows (<code class="font-mono bg-gray-100 px-1 rounded">%USERPROFILE%\.ssh\config</code>):
+      </p>
+      <div class="relative">
+        <button onclick="copyBlock('ps-ssh-block')"
+                class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
+          Copy
+        </button>
+        <pre id="ps-ssh-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre leading-relaxed">Host &lt;host-alias&gt;
+    HostName &lt;machine-ip-or-hostname&gt;
+    User &lt;your-username&gt;
+    ProxyCommand powershell -File %USERPROFILE%\wol-wake.ps1 &lt;machine-uuid&gt; %h %p
+    ServerAliveInterval 30
+    ServerAliveCountMax 3</pre>
+      </div>
     </div>
   </div>
 
@@ -168,12 +272,12 @@ Host {{ m.name | lower | replace(' ', '-') }}
           <code class="font-mono bg-gray-100 px-1 rounded">~/.zshrc</code>.</li>
       <li><strong>Tailscale</strong> — set <code class="font-mono bg-gray-100 px-1 rounded">WOL_MONKEY_URL</code>
           to your Tailscale address in the <code class="font-mono bg-gray-100 px-1 rounded">ProxyCommand</code>:
-          <code class="font-mono bg-gray-100 px-1 rounded">ProxyCommand env WOL_MONKEY_URL=http://100.x.y.z:8000 wol-wake &lt;id&gt; %h %p</code></li>
+          <code class="font-mono bg-gray-100 px-1 rounded">ProxyCommand env WOL_MONKEY_URL=http://&lt;wol-monkey-tailscale-ip&gt; wol-wake &lt;id&gt; %h %p</code></li>
       <li><strong>Token security</strong> — the token file is stored at
           <code class="font-mono bg-gray-100 px-1 rounded">~/.config/wol-monkey/token</code>
           with mode <code class="font-mono bg-gray-100 px-1 rounded">600</code> (readable only by you).
           You can revoke it at any time from
-          <a href="/settings" class="text-indigo-600 hover:underline">Settings → API Tokens</a>.</li>
+          <a href="/tokens" class="text-indigo-600 hover:underline">API Tokens</a>.</li>
     </ul>
   </div>
 
@@ -206,9 +310,11 @@ async function generateToken() {
     document.getElementById('token-create-area').classList.add('hidden');
     document.getElementById('token-result').classList.remove('hidden');
 
-    // Pre-fill token in script block
-    document.getElementById('s-token').textContent = raw;
-    document.getElementById('s-token').className = 'text-yellow-300';
+    // Pre-fill token in all script blocks (Linux + PowerShell)
+    ['s-token', 's-token-ps'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = raw; el.className = 'text-yellow-300'; }
+    });
 
   } catch (err) {
     errEl.textContent = 'Error: ' + err.message;
@@ -228,6 +334,23 @@ function copyBlock(id) {
   const el = document.getElementById(id);
   const text = el.innerText || el.textContent;
   navigator.clipboard.writeText(text);
+}
+
+const TABS = ['unix', 'win-wsl', 'win-ps'];
+function switchTab(name) {
+  TABS.forEach(t => {
+    const panel = document.getElementById('panel-' + t);
+    const btn   = document.getElementById('tab-' + t);
+    if (t === name) {
+      panel.classList.remove('hidden');
+      btn.classList.add('bg-indigo-600', 'text-white');
+      btn.classList.remove('bg-white', 'text-gray-600');
+    } else {
+      panel.classList.add('hidden');
+      btn.classList.remove('bg-indigo-600', 'text-white');
+      btn.classList.add('bg-white', 'text-gray-600');
+    }
+  });
 }
 </script>
 {% endblock %}
