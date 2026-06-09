@@ -87,6 +87,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `README.md`: full Quick Start, API reference, configuration table, wake strategy guide,
   deployment options, developer workflow, and Playwright-generated screenshots
 
+**Phase 9 — Setup wizard UX, probe reliability, worker fixes, security hardening**
+
+*Setup wizard*
+- Enforce linear step ordering — GET `/setup/{step}` redirects to `current_step` if requested
+  step is ahead of it; prevents jumping ahead in the wizard
+- Added `POST /setup/{step}/back` route and `SetupStateService.go_back()` method — un-completes
+  the current step and returns to the previous one
+- Back buttons on all wizard steps (admin, network, first_machine) with `tabindex="-1"` so
+  they don't interrupt Tab flow
+- Password field: wrapped in relative div, eye-icon show/hide toggle (`toggleVis`), strength
+  bar moved clearly below the input (no more overlap)
+- Password strength bar: `scorePassword()` returns 0–4; bar now shows at least 1 red segment
+  for any non-empty input so "Too short" state is visually communicated
+- Strength bar and label colours (`bg-red-400`, `bg-orange-400`, `bg-yellow-400`,
+  `bg-lime-500`, `bg-green-500`, `text-red-500`, `text-green-600`) added to `app.css` —
+  no inline styles, no build step
+- Tab order: Username → Password → Confirm Password → Submit; eye toggles and back buttons
+  excluded from tab order via `tabindex="-1"`
+- Auto-login after admin account creation so network step can immediately fetch
+  `/api/system/interfaces` with a valid session
+- Network step: checkbox to show/hide virtual interfaces (loopback, docker bridges, veth)
+  hidden by default; `populateInterfaces()` refactor populates dropdown on load and on toggle
+- `NetworkInterface` model: added `is_virtual` field (true for loopback, veth, docker-bridge,
+  bridge types); interface dropdown shows type tag for non-ethernet/wifi entries
+
+*Probe reliability*
+- `StateProbe.probe()`: added `ip_fallback` parameter — if hostname probe fails (DNS not
+  resolvable in container), retries with the raw IP address
+- `machine_status` endpoint and `EnsureOnlineService` poll loop both pass `ip_address` as
+  `ip_fallback` when a hostname is configured
+- `docker-compose.yml`: bind-mount host `/etc/hosts` read-only into app container so hostnames
+  defined in the host's `/etc/hosts` (e.g. `fedora-pc`) resolve correctly inside the container
+
+*Worker fixes*
+- `docker-compose.yml`: publish `db` port to `127.0.0.1:5432` on the host — required because
+  the worker runs with `network_mode: host` and cannot reach Docker bridge services by name
+- `docker-compose.yml`: run worker as `user: root` — `etherwake` checks `geteuid() == 0`
+  (not just `CAP_NET_RAW`); worker scope is limited to wake jobs only
+
+*Security hardening*
+- `SecurityHeadersMiddleware` added to FastAPI app — sets `Content-Security-Policy`,
+  `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`
+  on every response
+- `TrustedHostMiddleware` tightened to localhost only (Caddy proxies externally)
+- Login rate limiter (`_check_login_rate`) called at the start of the login handler —
+  per-IP, 5 attempts / 60 s window; single gunicorn worker ensures shared in-process state
+- Gunicorn workers reduced to 1 to guarantee rate limiter state is consistent
+- Docker containers hardened: `no-new-privileges`, `cap_drop: ALL` (app), `read_only: true`,
+  `tmpfs` for `/tmp` and `/run`
+
 **Phase 8 — Live testing + security hardening**
 - Fixed `WakeStrategy` enum: renamed `UDP = "udp"` → `UDP_BROADCAST = "udp_broadcast"`
   throughout domain, infra, templates, tests; Alembic migration `7da1313001d6` to backfill data
