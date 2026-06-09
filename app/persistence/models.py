@@ -80,7 +80,7 @@ class MachineModel(Base):
         UniqueConstraint("mac_address", name="uq_machines_mac_address"),
         CheckConstraint("ssh_port >= 1 AND ssh_port <= 65535", name="ck_machines_ssh_port"),
         CheckConstraint(
-            "wake_strategy IN ('etherwake', 'udp')",
+            "wake_strategy IN ('etherwake', 'udp_broadcast')",
             name="ck_machines_wake_strategy",
         ),
     )

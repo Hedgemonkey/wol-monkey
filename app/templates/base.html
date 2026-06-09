@@ -17,6 +17,7 @@
       <nav class="flex items-center gap-4 text-sm">
         <a href="/machines" class="hover:underline">Machines</a>
         <a href="/settings" class="hover:underline">Settings</a>
+        <a href="/ssh-setup" class="hover:underline">SSH Setup</a>
         <form method="post" action="/auth/logout" class="inline">
           <input type="hidden" name="_csrf" value="{{ csrf_token | default('') }}" />
           <button type="submit" class="hover:underline">Sign out</button>

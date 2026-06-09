@@ -74,7 +74,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
-            "wake_strategy IN ('etherwake', 'udp')", name="ck_machines_wake_strategy"
+            "wake_strategy IN ('etherwake', 'udp_broadcast')", name="ck_machines_wake_strategy"
         ),
         sa.CheckConstraint("ssh_port >= 1 AND ssh_port <= 65535", name="ck_machines_ssh_port"),
         sa.PrimaryKeyConstraint("id"),

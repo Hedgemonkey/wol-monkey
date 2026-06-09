@@ -374,6 +374,29 @@ async def machine_edit_post(
 
 
 # ---------------------------------------------------------------------------
+# SSH Auto-Wake setup guide
+# ---------------------------------------------------------------------------
+@router.get("/ssh-setup", response_class=HTMLResponse)
+async def ssh_setup_page(request: Request, db: DbSession) -> Response:
+    _session, user = await _require_web_auth(request, db)
+    if user is None:
+        return _redirect("/login")
+    machines = await SqlMachineRepository(db).list_all()
+    csrf = await _get_csrf(request, db)
+    # Derive the public base URL from the incoming request
+    base_url = str(request.base_url).rstrip("/")
+    return templates.TemplateResponse(
+        request,
+        "ssh_setup.html",
+        {
+            "machines": machines,
+            "csrf_token": csrf,
+            "base_url": base_url,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Settings page
 # ---------------------------------------------------------------------------
 @router.get("/settings", response_class=HTMLResponse)

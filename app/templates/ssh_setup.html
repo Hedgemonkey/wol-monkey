@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}SSH Auto-Wake Setup{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl space-y-6">
+
+  <div>
+    <h1 class="text-2xl font-bold mb-1">SSH Auto-Wake Setup</h1>
+    <p class="text-sm text-gray-500">
+      Automatically wake a sleeping machine when you SSH into it — from any terminal,
+      VS Code Remote-SSH, Windsurf, Cursor, or JetBrains Gateway.
+    </p>
+  </div>
+
+  {# ── How it works ─────────────────────────────────────────────────────── #}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-2">
+    <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">How it works</h2>
+    <ol class="list-decimal list-inside text-sm text-gray-700 space-y-1">
+      <li>SSH runs a small local script via <code class="font-mono bg-gray-100 px-1 rounded">ProxyCommand</code> before connecting.</li>
+      <li>The script calls this API — if the machine is already online it exits immediately.</li>
+      <li>If the machine is sleeping, it sends the wake packet and waits until TCP/SSH responds.</li>
+      <li>SSH then connects normally to the now-awake machine.</li>
+    </ol>
+  </div>
+
+  {# ── Step 1: generate token ────────────────────────────────────────────── #}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+    <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+      Step 1 — Generate a dedicated API token
+    </h2>
+    <p class="text-sm text-gray-600">
+      This creates a read + wake token scoped only to this use-case.
+      The token is shown <strong>once</strong> — copy it before leaving this page.
+    </p>
+
+    <div id="token-create-area">
+      <button id="btn-generate-token"
+              onclick="generateToken()"
+              class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2 text-sm transition-colors">
+        Generate SSH wake token
+      </button>
+      <p id="token-error" class="hidden mt-2 text-sm text-red-600"></p>
+    </div>
+
+    <div id="token-result" class="hidden space-y-3">
+      <div class="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800">
+        <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        Token created — copy it now, it will not be shown again.
+      </div>
+      <div class="flex gap-2 items-center">
+        <code id="token-value"
+              class="flex-1 block font-mono text-sm bg-gray-900 text-green-400 rounded-lg px-4 py-3 break-all select-all"></code>
+        <button onclick="copyToken()"
+                class="shrink-0 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 px-3 py-2 text-xs font-medium text-gray-700 transition-colors">
+          Copy
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {# ── Step 2: install script ────────────────────────────────────────────── #}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+    <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+      Step 2 — Install the <code class="font-mono normal-case">wol-wake</code> script
+    </h2>
+    <p class="text-sm text-gray-600">
+      Run this once on the machine you SSH <em>from</em> (your laptop/desktop).
+      Requires <code class="font-mono bg-gray-100 px-1 rounded">curl</code> and
+      <code class="font-mono bg-gray-100 px-1 rounded">jq</code>
+      (<code class="font-mono bg-gray-100 px-1 rounded">sudo apt install curl jq</code> /
+       <code class="font-mono bg-gray-100 px-1 rounded">brew install curl jq</code>).
+    </p>
+
+    <div class="relative">
+      <button onclick="copyBlock('script-block')"
+              class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
+        Copy
+      </button>
+      <pre id="script-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed">mkdir -p ~/.config/wol-monkey
+echo "<span id='s-token' class='text-yellow-300'>PASTE_YOUR_TOKEN_HERE</span>" &gt; ~/.config/wol-monkey/token
+chmod 600 ~/.config/wol-monkey/token
+
+install -Dm 755 /dev/stdin ~/.local/bin/wol-wake &lt;&lt; 'EOF'
+#!/usr/bin/env bash
+# wol-wake — auto-wake via WoL-Monkey before SSH connects
+set -euo pipefail
+MACHINE_ID="${1:?machine-id required}"
+SSH_HOST="${2:?ssh-host required}"
+SSH_PORT="${3:-22}"
+WOL_BASE="${WOL_MONKEY_URL:-<span id='s-url' class='text-cyan-300'>{{ base_url }}</span>}"
+TOKEN_FILE="${WOL_MONKEY_TOKEN_FILE:-$HOME/.config/wol-monkey/token}"
+TOKEN="${WOL_MONKEY_TOKEN:-$(cat "$TOKEN_FILE" 2>/dev/null)}"
+POLL_TIMEOUT="${WOL_MONKEY_TIMEOUT:-90}"
+if [[ -z "$TOKEN" ]]; then
+  echo "wol-wake: no token — set WOL_MONKEY_TOKEN or create $TOKEN_FILE" &gt;&amp;2; exit 1
+fi
+AUTH=(-H "Authorization: Bearer $TOKEN")
+STATE=$(curl -sf "${AUTH[@]}" \
+  "$WOL_BASE/api/machines/$MACHINE_ID/status" | jq -r '.state' 2&gt;/dev/null || echo "unknown")
+if [[ "$STATE" != "online" ]]; then
+  echo "wol-wake: $STATE — waking..." &gt;&amp;2
+  curl -sf -X POST "${AUTH[@]}" -H "Content-Type: application/json" \
+    -d "{\"ensure_online\":true,\"poll_timeout_s\":$POLL_TIMEOUT}" \
+    "$WOL_BASE/api/machines/$MACHINE_ID/wake/direct" &gt;/dev/null || true
+  echo "wol-wake: connecting" &gt;&amp;2
+fi
+exec nc "$SSH_HOST" "$SSH_PORT"
+EOF
+
+echo "Installed. Make sure ~/.local/bin is on your PATH."</pre>
+    </div>
+  </div>
+
+  {# ── Step 3: SSH config ────────────────────────────────────────────────── #}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+    <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+      Step 3 — Add to <code class="font-mono normal-case">~/.ssh/config</code>
+    </h2>
+    <p class="text-sm text-gray-600">
+      Pick the machine(s) you want to auto-wake. Copy the relevant block into
+      <code class="font-mono bg-gray-100 px-1 rounded">~/.ssh/config</code> on your client.
+    </p>
+
+    {% if machines %}
+    <div class="space-y-4">
+      {% for m in machines %}
+      <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="flex items-center justify-between bg-gray-50 px-4 py-2 border-b border-gray-200">
+          <span class="font-semibold text-sm text-gray-800">{{ m.name }}</span>
+          <button onclick="copyBlock('ssh-block-{{ loop.index }}')"
+                  class="rounded border border-gray-300 bg-white hover:bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 transition-colors">
+            Copy
+          </button>
+        </div>
+        <pre id="ssh-block-{{ loop.index }}" class="font-mono text-xs bg-gray-900 text-gray-100 px-4 py-3 overflow-x-auto whitespace-pre leading-relaxed"># ~/.ssh/config — {{ m.name }}
+Host {{ m.name | lower | replace(' ', '-') }}
+    HostName {{ m.hostname or m.ip_address }}
+    User YOUR_USERNAME
+    ProxyCommand wol-wake {{ m.id }} %h %p
+    ServerAliveInterval 30
+    ServerAliveCountMax 3</pre>
+        <div class="bg-gray-50 border-t border-gray-200 px-4 py-2 flex flex-wrap gap-4 text-xs text-gray-500">
+          <span>IP: <code class="font-mono">{{ m.ip_address }}</code></span>
+          <span>MAC: <code class="font-mono">{{ m.mac_address }}</code></span>
+          <span>Machine ID: <code class="font-mono select-all">{{ m.id }}</code></span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-500 italic">No machines configured yet — add one from the
+      <a href="/machines" class="text-indigo-600 hover:underline">Machines</a> page first.</p>
+    {% endif %}
+  </div>
+
+  {# ── Notes ─────────────────────────────────────────────────────────────── #}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-3 text-sm text-gray-700">
+    <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">Notes</h2>
+    <ul class="list-disc list-inside space-y-1">
+      <li><strong>VS Code / Windsurf / Cursor / JetBrains Gateway</strong> — these IDEs read
+          <code class="font-mono bg-gray-100 px-1 rounded">~/.ssh/config</code> directly,
+          so Step 3 is all you need after the script is installed.</li>
+      <li><strong>PATH</strong> — if <code class="font-mono bg-gray-100 px-1 rounded">wol-wake: command not found</code>,
+          add <code class="font-mono bg-gray-100 px-1 rounded">export PATH="$HOME/.local/bin:$PATH"</code>
+          to your <code class="font-mono bg-gray-100 px-1 rounded">~/.bashrc</code> or
+          <code class="font-mono bg-gray-100 px-1 rounded">~/.zshrc</code>.</li>
+      <li><strong>Tailscale</strong> — set <code class="font-mono bg-gray-100 px-1 rounded">WOL_MONKEY_URL</code>
+          to your Tailscale address in the <code class="font-mono bg-gray-100 px-1 rounded">ProxyCommand</code>:
+          <code class="font-mono bg-gray-100 px-1 rounded">ProxyCommand env WOL_MONKEY_URL=http://100.x.y.z:8000 wol-wake &lt;id&gt; %h %p</code></li>
+      <li><strong>Token security</strong> — the token file is stored at
+          <code class="font-mono bg-gray-100 px-1 rounded">~/.config/wol-monkey/token</code>
+          with mode <code class="font-mono bg-gray-100 px-1 rounded">600</code> (readable only by you).
+          You can revoke it at any time from
+          <a href="/settings" class="text-indigo-600 hover:underline">Settings → API Tokens</a>.</li>
+    </ul>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CSRF = {{ csrf_token | tojson }};
+
+async function generateToken() {
+  const btn = document.getElementById('btn-generate-token');
+  const errEl = document.getElementById('token-error');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  errEl.classList.add('hidden');
+
+  try {
+    const data = await apiFetch('/api/auth/tokens', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': CSRF },
+      body: JSON.stringify({ name: 'SSH auto-wake', scopes: {} }),
+    });
+
+    const raw = data.raw_token;
+    document.getElementById('token-value').textContent = raw;
+    document.getElementById('token-create-area').classList.add('hidden');
+    document.getElementById('token-result').classList.remove('hidden');
+
+    // Pre-fill token in script block
+    document.getElementById('s-token').textContent = raw;
+    document.getElementById('s-token').className = 'text-yellow-300';
+
+  } catch (err) {
+    errEl.textContent = 'Error: ' + err.message;
+    errEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Generate SSH wake token';
+  }
+}
+
+function copyToken() {
+  const val = document.getElementById('token-value').textContent;
+  navigator.clipboard.writeText(val);
+}
+
+function copyBlock(id) {
+  // Copy the text content of a <pre> — strip HTML tags from spans
+  const el = document.getElementById(id);
+  const text = el.innerText || el.textContent;
+  navigator.clipboard.writeText(text);
+}
+</script>
+{% endblock %}
