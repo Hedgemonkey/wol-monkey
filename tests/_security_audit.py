@@ -8,8 +8,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
 
-FEDORA_MAC = "d8:bb:c1:cd:d1:c7"
-FEDORA_IP = "172.24.0.2"
+DEMO_MAC = "aa:bb:cc:dd:ee:01"
+DEMO_IP = "10.0.0.10"
 
 passed: list[str] = []
 failed: list[str] = []
@@ -54,7 +54,7 @@ async def main() -> None:
         csrf = await do_setup(c)
         r = await c.post(
             "/api/machines",
-            json={"name": "Fedora PC", "ip_address": FEDORA_IP, "mac_address": FEDORA_MAC},
+            json={"name": "Desktop PC", "ip_address": DEMO_IP, "mac_address": DEMO_MAC},
             headers={"X-CSRF-Token": csrf},
         )
         mid = r.json()["id"]
@@ -338,13 +338,13 @@ async def main() -> None:
             await c.delete(f"/api/machines/{r.json()['id']}", headers={"X-CSRF-Token": csrf4})
 
         # ================================================================
-        section("10. LIVE PROBE — Fedora PC on 172.24.0.2")
+        section("10. LIVE PROBE — Desktop PC")
         # ================================================================
         r = await c.get(f"/api/machines/{mid}/status")
         p = r.json()
         check(r.status_code == 200, "probe → 200")
-        check(p["tcp_ssh_ok"] is True, f"Fedora TCP-SSH open (state={p['state']})")
-        check(p["state"] == "online", "Fedora state=online")
+        check(p["tcp_ssh_ok"] is True, f"TCP-SSH open (state={p['state']})")
+        check(p["state"] == "online", "machine state=online")
 
         # ================================================================
         section("11. WAKE PACKET DISPATCH — monitor without sleeping host")

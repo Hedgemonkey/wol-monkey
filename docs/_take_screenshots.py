@@ -42,24 +42,24 @@ def setup_app() -> tuple[str, requests.Session]:
     # Add demo machines if not present
     existing = s.get(f"{BASE}/api/machines").json()
     names = {m["name"] for m in existing}
-    if "Fedora PC" not in names:
+    if "Desktop PC" not in names:
         s.post(
             f"{BASE}/api/machines",
             json={
-                "name": "Fedora PC",
-                "ip_address": "172.24.0.2",
-                "mac_address": "d8:bb:c1:cd:d1:c7",
+                "name": "Desktop PC",
+                "ip_address": "10.0.0.10",
+                "mac_address": "aa:bb:cc:dd:ee:01",
                 "wake_strategy": "etherwake",
             },
             headers={"X-CSRF-Token": csrf},
         )
-    if "NAS" not in names:
+    if "Home Server" not in names:
         s.post(
             f"{BASE}/api/machines",
             json={
-                "name": "NAS",
-                "ip_address": "192.168.1.10",
-                "mac_address": "00:11:22:33:44:55",
+                "name": "Home Server",
+                "ip_address": "10.0.0.20",
+                "mac_address": "aa:bb:cc:dd:ee:02",
                 "wake_strategy": "udp_broadcast",
             },
             headers={"X-CSRF-Token": csrf},
