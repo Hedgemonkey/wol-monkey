@@ -74,8 +74,12 @@ async def setup_page(step: str, request: Request, db: DbSession) -> Response:
     if await setup_svc.is_complete():
         return _redirect("/machines")
     state = await setup_svc.get_state()
+    current_step = str(state["current_step"])
     if step not in WIZARD_STEPS:
-        return _redirect(f"/setup/{state['current_step']}")
+        return _redirect(f"/setup/{current_step}")
+    # Prevent jumping ahead — only allow current step or any already-completed step
+    if WIZARD_STEPS.index(step) > WIZARD_STEPS.index(current_step):
+        return _redirect(f"/setup/{current_step}")
     step_index = WIZARD_STEPS.index(step)
     return templates.TemplateResponse(
         request,
