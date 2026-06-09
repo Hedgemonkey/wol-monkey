@@ -38,6 +38,7 @@ class MachineRecord:
     broadcast_address: str | None
     enabled: bool
     created_at: datetime
+    updated_at: datetime
 
 
 @dataclass
@@ -70,6 +71,7 @@ class SessionRecord:
 @dataclass
 class ApiTokenRecord:
     id: str
+    user_id: str
     name: str
     token_hash: str
     prefix: str
@@ -187,7 +189,7 @@ class SessionRepository(ABC):
 class ApiTokenRepository(ABC):
     @abstractmethod
     async def create(
-        self, name: str, token_hash: str, prefix: str, scopes: dict[str, object]
+        self, name: str, token_hash: str, prefix: str, scopes: dict[str, object], user_id: str
     ) -> ApiTokenRecord: ...
 
     @abstractmethod

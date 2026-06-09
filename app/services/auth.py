@@ -108,12 +108,12 @@ class AuthService:
     # API token management
     # ------------------------------------------------------------------
     async def create_api_token(
-        self, name: str, scopes: dict[str, object]
+        self, name: str, scopes: dict[str, object], user_id: str
     ) -> tuple[str, ApiTokenRecord]:
         """Returns (raw_token, record). raw_token shown once — never stored."""
         raw, prefix, token_hash = generate_token()
         record = await self._tokens.create(
-            name=name, token_hash=token_hash, prefix=prefix, scopes=scopes
+            name=name, token_hash=token_hash, prefix=prefix, scopes=scopes, user_id=user_id
         )
         logger.info("api_token_created", token_id=record.id, name=name)
         return raw, record

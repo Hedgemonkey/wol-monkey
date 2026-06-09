@@ -206,6 +206,9 @@ class ApiTokenModel(Base):
     __tablename__ = "api_tokens"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     prefix: Mapped[str] = mapped_column(String(16), nullable=False)

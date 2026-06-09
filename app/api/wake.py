@@ -15,7 +15,12 @@ from app.persistence.repositories import (
     SqlMachineRepository,
     SqlWakeAttemptRepository,
 )
-from app.security.dependencies import ApiToken, CsrfProtected, CurrentUser  # noqa: TC001
+from app.security.dependencies import (  # noqa: TC001
+    ApiToken,
+    CsrfProtected,
+    CurrentUser,
+    SessionOrTokenUser,
+)
 from app.services.wake import WakeError, WakeService
 from worker.job_queue import JobQueue
 
@@ -163,7 +168,7 @@ async def wake_machine_direct(
 async def get_attempt_status(
     machine_id: str,
     attempt_id: str,
-    _user: CurrentUser,
+    _user: SessionOrTokenUser,
     db: DbSession,
 ) -> AttemptStatusResponse:
     repo = SqlWakeAttemptRepository(db)
@@ -189,7 +194,7 @@ async def get_attempt_status(
 )
 async def machine_status(
     machine_id: str,
-    _user: CurrentUser,
+    _user: SessionOrTokenUser,
     db: DbSession,
 ) -> MachineStatusResponse:
     repo = SqlMachineRepository(db)

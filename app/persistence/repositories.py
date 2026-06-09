@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -38,6 +39,14 @@ from app.persistence.models import (
 )
 
 
+def _is_valid_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
+
+
 def _user_to_record(m: UserModel) -> UserRecord:
     return UserRecord(
         id=m.id,
@@ -62,6 +71,7 @@ def _machine_to_record(m: MachineModel) -> MachineRecord:
         broadcast_address=str(m.broadcast_address) if m.broadcast_address else None,
         enabled=m.enabled,
         created_at=m.created_at,
+        updated_at=m.updated_at,
     )
 
 
@@ -97,6 +107,7 @@ def _session_to_record(m: SessionModel) -> SessionRecord:
 def _token_to_record(m: ApiTokenModel) -> ApiTokenRecord:
     return ApiTokenRecord(
         id=m.id,
+        user_id=m.user_id,
         name=m.name,
         token_hash=m.token_hash,
         prefix=m.prefix,
@@ -125,6 +136,8 @@ class SqlUserRepository(UserRepository):
         self._session = session
 
     async def get_by_id(self, user_id: str) -> UserRecord | None:
+        if not _is_valid_uuid(user_id):
+            return None
         result = await self._session.get(UserModel, user_id)
         return _user_to_record(result) if result else None
 
@@ -163,6 +176,8 @@ class SqlMachineRepository(MachineRepository):
         self._session = session
 
     async def get_by_id(self, machine_id: str) -> MachineRecord | None:
+        if not _is_valid_uuid(machine_id):
+            return None
         result = await self._session.get(MachineModel, machine_id)
         return _machine_to_record(result) if result else None
 
@@ -181,6 +196,8 @@ class SqlMachineRepository(MachineRepository):
         return _machine_to_record(model)
 
     async def update(self, machine_id: str, **kwargs: object) -> MachineRecord | None:
+        if not _is_valid_uuid(machine_id):
+            return None
         model = await self._session.get(MachineModel, machine_id)
         if model is None:
             return None
@@ -191,6 +208,8 @@ class SqlMachineRepository(MachineRepository):
         return _machine_to_record(model)
 
     async def delete(self, machine_id: str) -> bool:
+        if not _is_valid_uuid(machine_id):
+            return False
         model = await self._session.get(MachineModel, machine_id)
         if model is None:
             return False
@@ -218,6 +237,8 @@ class SqlWakeAttemptRepository(WakeAttemptRepository):
         return _attempt_to_record(model)
 
     async def get_by_id(self, attempt_id: str) -> WakeAttemptRecord | None:
+        if not _is_valid_uuid(attempt_id):
+            return None
         result = await self._session.get(WakeAttemptModel, attempt_id)
         return _attempt_to_record(result) if result else None
 
@@ -288,6 +309,8 @@ class SqlSessionRepository(SessionRepository):
         return _session_to_record(model)
 
     async def get_by_id(self, session_id: str) -> SessionRecord | None:
+        if not _is_valid_uuid(session_id):
+            return None
         result = await self._session.get(SessionModel, session_id)
         return _session_to_record(result) if result else None
 
@@ -315,9 +338,11 @@ class SqlApiTokenRepository(ApiTokenRepository):
         self._session = session
 
     async def create(
-        self, name: str, token_hash: str, prefix: str, scopes: dict[str, object]
+        self, name: str, token_hash: str, prefix: str, scopes: dict[str, object], user_id: str
     ) -> ApiTokenRecord:
-        model = ApiTokenModel(name=name, token_hash=token_hash, prefix=prefix, scopes=scopes)
+        model = ApiTokenModel(
+            name=name, token_hash=token_hash, prefix=prefix, scopes=scopes, user_id=user_id
+        )
         self._session.add(model)
         await self._session.flush()
         await self._session.refresh(model)

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.machine import WakeStrategy
 from app.persistence.database import get_db_session
 from app.persistence.repositories import SqlMachineRepository
-from app.security.dependencies import CsrfProtected, CurrentUser  # noqa: TC001
+from app.security.dependencies import CsrfProtected, CurrentUser, SessionOrTokenUser  # noqa: TC001
 
 router = APIRouter(tags=["machines"])
 
@@ -86,7 +86,7 @@ def _to_response(record) -> MachineResponse:  # type: ignore[no-untyped-def]
     summary="List all machines",
 )
 async def list_machines(
-    _user: CurrentUser,
+    _user: SessionOrTokenUser,
     db: DbSession,
     enabled_only: bool = False,
 ) -> list[MachineResponse]:
@@ -119,7 +119,7 @@ async def create_machine(
 )
 async def get_machine(
     machine_id: str,
-    _user: CurrentUser,
+    _user: SessionOrTokenUser,
     db: DbSession,
 ) -> MachineResponse:
     repo = SqlMachineRepository(db)

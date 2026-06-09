@@ -12,7 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
 from app.persistence.database import get_db_session
-from app.security.dependencies import get_current_session_and_user
+from app.security.dependencies import get_current_session_and_user, get_user_from_session_or_token
 
 
 @pytest.fixture
@@ -69,10 +69,14 @@ def _auth_overrides(app, user=None, session=None) -> Generator[None, None, None]
     async def _fake_auth():
         return s, u
 
+    async def _fake_user_only():
+        return u
+
     async def _fake_db():
         yield MagicMock()
 
     app.dependency_overrides[get_current_session_and_user] = _fake_auth
+    app.dependency_overrides[get_user_from_session_or_token] = _fake_user_only
     app.dependency_overrides[get_db_session] = _fake_db
     try:
         yield

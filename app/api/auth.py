@@ -20,6 +20,7 @@ from app.security.dependencies import (  # noqa: TC001
     CsrfProtected,
     CurrentSession,
     CurrentUser,
+    SessionOrTokenUser,
 )
 from app.services.auth import SESSION_COOKIE_NAME, SESSION_LIFETIME_HOURS, AuthenticationError
 
@@ -134,7 +135,7 @@ async def logout(
     "/auth/me",
     summary="Return current authenticated user info",
 )
-async def me(user: CurrentUser) -> dict[str, str]:
+async def me(user: SessionOrTokenUser) -> dict[str, str]:
     return {"id": user.id, "username": user.username, "role": user.role}
 
 
@@ -155,7 +156,9 @@ async def create_token(
         session_repo=SqlSessionRepository(db),
         token_repo=SqlApiTokenRepository(db),
     )
-    raw, record = await auth_svc.create_api_token(name=body.name, scopes=body.scopes)
+    raw, record = await auth_svc.create_api_token(
+        name=body.name, scopes=body.scopes, user_id=_user.id
+    )
     return TokenCreateResponse(
         id=record.id,
         name=record.name,

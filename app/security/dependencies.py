@@ -120,3 +120,40 @@ async def get_api_token(
 
 
 ApiToken = Annotated[ApiTokenRecord, Depends(get_api_token)]
+
+
+# ---------------------------------------------------------------------------
+# Combined: session cookie OR Bearer token (for read endpoints)
+# ---------------------------------------------------------------------------
+async def get_user_from_session_or_token(
+    request: Request,
+    db: DbSession,
+    wm_session: Annotated[str | None, Cookie(alias=_SESSION_COOKIE)] = None,
+    authorization: Annotated[str | None, Header()] = None,
+) -> UserRecord:
+    auth_svc = get_auth_service(
+        user_repo=SqlUserRepository(db),
+        session_repo=SqlSessionRepository(db),
+        token_repo=SqlApiTokenRepository(db),
+    )
+    # Try session cookie first
+    if wm_session is not None:
+        try:
+            _, user = await auth_svc.validate_session(wm_session)
+            return user
+        except Exception:
+            pass
+    # Fall back to Bearer token
+    if authorization is not None and authorization.startswith(_BEARER_PREFIX):
+        raw_token = authorization[len(_BEARER_PREFIX) :]
+        try:
+            token_record = await auth_svc.validate_api_token(raw_token)
+            token_user = await SqlUserRepository(db).get_by_id(token_record.user_id)
+            if token_user is not None:
+                return token_user
+        except Exception:
+            pass
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+
+SessionOrTokenUser = Annotated[UserRecord, Depends(get_user_from_session_or_token)]
