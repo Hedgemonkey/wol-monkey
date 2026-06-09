@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}API Tokens{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl space-y-6">
+
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold mb-1">API Tokens</h1>
+      <p class="text-sm text-gray-500">Manage tokens for programmatic access and SSH auto-wake.</p>
+    </div>
+    <button onclick="showCreateModal(null, 'Global token')"
+            class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 text-sm transition-colors">
+      + New global token
+    </button>
+  </div>
+
+  {# ── Per-machine sections ──────────────────────────────────────────────── #}
+  {% for machine in machines %}
+  {% set machine_tokens = tokens_by_machine.get(machine.id, []) %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="flex items-center justify-between bg-gray-50 border-b border-gray-200 px-5 py-3">
+      <div>
+        <span class="font-semibold text-gray-800">{{ machine.name }}</span>
+        <span class="ml-2 text-xs text-gray-400 font-mono">{{ machine.ip_address }}</span>
+      </div>
+      <button onclick="showCreateModal('{{ machine.id }}', '{{ machine.name }}')"
+              class="rounded-lg border border-indigo-300 bg-white hover:bg-indigo-50 text-indigo-700 font-medium px-3 py-1 text-xs transition-colors">
+        + Add token
+      </button>
+    </div>
+
+    {% if machine_tokens %}
+    <table class="w-full text-sm">
+      <thead class="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+        <tr>
+          <th class="text-left px-5 py-2">Name</th>
+          <th class="text-left px-5 py-2">Prefix</th>
+          <th class="text-left px-5 py-2">Created</th>
+          <th class="text-left px-5 py-2">Last used</th>
+          <th class="px-5 py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for t in machine_tokens %}
+        <tr class="hover:bg-gray-50" id="token-row-{{ t.id }}">
+          <td class="px-5 py-3 font-medium text-gray-800">{{ t.name }}</td>
+          <td class="px-5 py-3 font-mono text-xs text-gray-500">{{ t.prefix }}…</td>
+          <td class="px-5 py-3 text-gray-500">{{ t.created_at.strftime('%Y-%m-%d') }}</td>
+          <td class="px-5 py-3 text-gray-500">
+            {{ t.last_used_at.strftime('%Y-%m-%d %H:%M') if t.last_used_at else '—' }}
+          </td>
+          <td class="px-5 py-3 text-right">
+            <button onclick="revokeToken('{{ t.id }}', '{{ t.name }}')"
+                    class="text-xs text-red-600 hover:text-red-800 font-medium">Revoke</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="px-5 py-4 text-sm text-gray-400 italic">No tokens for this machine.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# ── Global tokens (no machine_id) ────────────────────────────────────── #}
+  {% set global_tokens = tokens_by_machine.get(none, []) %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="flex items-center justify-between bg-gray-50 border-b border-gray-200 px-5 py-3">
+      <div>
+        <span class="font-semibold text-gray-800">Global tokens</span>
+        <span class="ml-2 text-xs text-gray-400">not scoped to a specific machine</span>
+      </div>
+    </div>
+
+    {% if global_tokens %}
+    <table class="w-full text-sm">
+      <thead class="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+        <tr>
+          <th class="text-left px-5 py-2">Name</th>
+          <th class="text-left px-5 py-2">Prefix</th>
+          <th class="text-left px-5 py-2">Created</th>
+          <th class="text-left px-5 py-2">Last used</th>
+          <th class="px-5 py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for t in global_tokens %}
+        <tr class="hover:bg-gray-50" id="token-row-{{ t.id }}">
+          <td class="px-5 py-3 font-medium text-gray-800">{{ t.name }}</td>
+          <td class="px-5 py-3 font-mono text-xs text-gray-500">{{ t.prefix }}…</td>
+          <td class="px-5 py-3 text-gray-500">{{ t.created_at.strftime('%Y-%m-%d') }}</td>
+          <td class="px-5 py-3 text-gray-500">
+            {{ t.last_used_at.strftime('%Y-%m-%d %H:%M') if t.last_used_at else '—' }}
+          </td>
+          <td class="px-5 py-3 text-right">
+            <button onclick="revokeToken('{{ t.id }}', '{{ t.name }}')"
+                    class="text-xs text-red-600 hover:text-red-800 font-medium">Revoke</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="px-5 py-4 text-sm text-gray-400 italic">No global tokens.</p>
+    {% endif %}
+  </div>
+
+  {% if not machines %}
+  <p class="text-sm text-gray-500">No machines configured yet —
+    <a href="/machines/new" class="text-indigo-600 hover:underline">add one first</a>.
+  </p>
+  {% endif %}
+
+</div>
+
+{# ── Create token modal ────────────────────────────────────────────────── #}
+<div id="create-modal"
+     class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
+    <h2 class="font-bold text-lg" id="modal-title">Create token</h2>
+
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Token name</label>
+      <input id="modal-name" type="text" maxlength="255" placeholder="e.g. Laptop SSH key"
+             class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+    </div>
+
+    <p id="modal-error" class="hidden text-sm text-red-600"></p>
+
+    {# Token display — shown once after creation #}
+    <div id="modal-token-result" class="hidden space-y-2">
+      <div class="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-800">
+        Token created — copy it now, it will not be shown again.
+      </div>
+      <div class="flex gap-2 items-center">
+        <code id="modal-token-value"
+              class="flex-1 font-mono text-xs bg-gray-900 text-green-400 rounded-lg px-3 py-2 break-all select-all"></code>
+        <button onclick="copyModalToken()"
+                class="shrink-0 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 px-2 py-1.5 text-xs text-gray-700">
+          Copy
+        </button>
+      </div>
+    </div>
+
+    <div id="modal-actions" class="flex justify-end gap-3 pt-2">
+      <button onclick="closeModal()"
+              class="rounded-lg border border-gray-300 bg-white hover:bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700">
+        Cancel
+      </button>
+      <button id="modal-submit" onclick="submitCreate()"
+              class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 text-sm transition-colors">
+        Create token
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CSRF = {{ csrf_token | tojson }};
+let _pendingMachineId = null;
+
+function showCreateModal(machineId, machineName) {
+  _pendingMachineId = machineId;
+  document.getElementById('modal-title').textContent =
+    machineId ? `New token for ${machineName}` : 'New global token';
+  document.getElementById('modal-name').value = '';
+  document.getElementById('modal-error').classList.add('hidden');
+  document.getElementById('modal-token-result').classList.add('hidden');
+  document.getElementById('modal-actions').classList.remove('hidden');
+  document.getElementById('modal-submit').disabled = false;
+  document.getElementById('modal-submit').textContent = 'Create token';
+  document.getElementById('create-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('modal-name').focus(), 50);
+}
+
+function closeModal() {
+  document.getElementById('create-modal').classList.add('hidden');
+  // Reload to show new token in the list (without the raw value)
+  if (document.getElementById('modal-token-result').classList.contains('hidden') === false) {
+    location.reload();
+  }
+}
+
+async function submitCreate() {
+  const name = document.getElementById('modal-name').value.trim();
+  const errEl = document.getElementById('modal-error');
+  if (!name) { errEl.textContent = 'Name is required.'; errEl.classList.remove('hidden'); return; }
+  errEl.classList.add('hidden');
+
+  const btn = document.getElementById('modal-submit');
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+
+  try {
+    const payload = { name, scopes: {} };
+    if (_pendingMachineId) payload.machine_id = _pendingMachineId;
+
+    const data = await apiFetch('/api/auth/tokens', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': CSRF },
+      body: JSON.stringify(payload),
+    });
+
+    document.getElementById('modal-token-value').textContent = data.raw_token;
+    document.getElementById('modal-token-result').classList.remove('hidden');
+    document.getElementById('modal-actions').innerHTML =
+      '<button onclick="closeModal()" class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 text-sm">Done</button>';
+
+  } catch (err) {
+    errEl.textContent = 'Error: ' + err.message;
+    errEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Create token';
+  }
+}
+
+function copyModalToken() {
+  navigator.clipboard.writeText(document.getElementById('modal-token-value').textContent);
+}
+
+async function revokeToken(tokenId, tokenName) {
+  if (!confirm(`Revoke token "${tokenName}"? Any scripts using it will stop working.`)) return;
+  try {
+    await apiFetch(`/api/auth/tokens/${tokenId}`, {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': CSRF },
+    });
+    const row = document.getElementById(`token-row-${tokenId}`);
+    if (row) {
+      row.style.transition = 'opacity 0.3s';
+      row.style.opacity = '0';
+      setTimeout(() => row.remove(), 300);
+    }
+  } catch (err) {
+    alert('Failed to revoke: ' + err.message);
+  }
+}
+
+// Close modal on backdrop click
+document.getElementById('create-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+</script>
+{% endblock %}

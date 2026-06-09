@@ -72,6 +72,7 @@ class SessionRecord:
 class ApiTokenRecord:
     id: str
     user_id: str
+    machine_id: str | None
     name: str
     token_hash: str
     prefix: str
@@ -189,7 +190,13 @@ class SessionRepository(ABC):
 class ApiTokenRepository(ABC):
     @abstractmethod
     async def create(
-        self, name: str, token_hash: str, prefix: str, scopes: dict[str, object], user_id: str
+        self,
+        name: str,
+        token_hash: str,
+        prefix: str,
+        scopes: dict[str, object],
+        user_id: str,
+        machine_id: str | None = None,
     ) -> ApiTokenRecord: ...
 
     @abstractmethod
@@ -197,6 +204,9 @@ class ApiTokenRepository(ABC):
 
     @abstractmethod
     async def list_active(self) -> list[ApiTokenRecord]: ...
+
+    @abstractmethod
+    async def list_for_machine(self, machine_id: str) -> list[ApiTokenRecord]: ...
 
     @abstractmethod
     async def revoke(self, token_id: str) -> None: ...

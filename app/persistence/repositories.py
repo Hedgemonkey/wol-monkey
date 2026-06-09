@@ -108,6 +108,7 @@ def _token_to_record(m: ApiTokenModel) -> ApiTokenRecord:
     return ApiTokenRecord(
         id=m.id,
         user_id=m.user_id,
+        machine_id=m.machine_id,
         name=m.name,
         token_hash=m.token_hash,
         prefix=m.prefix,
@@ -338,10 +339,21 @@ class SqlApiTokenRepository(ApiTokenRepository):
         self._session = session
 
     async def create(
-        self, name: str, token_hash: str, prefix: str, scopes: dict[str, object], user_id: str
+        self,
+        name: str,
+        token_hash: str,
+        prefix: str,
+        scopes: dict[str, object],
+        user_id: str,
+        machine_id: str | None = None,
     ) -> ApiTokenRecord:
         model = ApiTokenModel(
-            name=name, token_hash=token_hash, prefix=prefix, scopes=scopes, user_id=user_id
+            name=name,
+            token_hash=token_hash,
+            prefix=prefix,
+            scopes=scopes,
+            user_id=user_id,
+            machine_id=machine_id,
         )
         self._session.add(model)
         await self._session.flush()
@@ -358,6 +370,16 @@ class SqlApiTokenRepository(ApiTokenRepository):
 
     async def list_active(self) -> list[ApiTokenRecord]:
         stmt = select(ApiTokenModel).where(ApiTokenModel.revoked_at.is_(None))
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_token_to_record(r) for r in rows]
+
+    async def list_for_machine(self, machine_id: str) -> list[ApiTokenRecord]:
+        if not _is_valid_uuid(machine_id):
+            return []
+        stmt = select(ApiTokenModel).where(
+            ApiTokenModel.machine_id == machine_id,
+            ApiTokenModel.revoked_at.is_(None),
+        )
         rows = (await self._session.execute(stmt)).scalars().all()
         return [_token_to_record(r) for r in rows]
 

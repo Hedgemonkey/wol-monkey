@@ -47,6 +47,7 @@ class LoginResponse(BaseModel):
 class TokenCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     scopes: dict[str, object] = Field(default_factory=dict)
+    machine_id: str | None = None
 
 
 class TokenCreateResponse(BaseModel):
@@ -61,6 +62,7 @@ class TokenListItem(BaseModel):
     id: str
     name: str
     prefix: str
+    machine_id: str | None
     created_at: str
     last_used_at: str | None
 
@@ -157,7 +159,7 @@ async def create_token(
         token_repo=SqlApiTokenRepository(db),
     )
     raw, record = await auth_svc.create_api_token(
-        name=body.name, scopes=body.scopes, user_id=_user.id
+        name=body.name, scopes=body.scopes, user_id=_user.id, machine_id=body.machine_id
     )
     return TokenCreateResponse(
         id=record.id,
@@ -175,18 +177,23 @@ async def create_token(
 async def list_tokens(
     _user: CurrentUser,
     db: DbSession,
+    machine_id: str | None = None,
 ) -> list[TokenListItem]:
     auth_svc = get_auth_service(
         user_repo=SqlUserRepository(db),
         session_repo=SqlSessionRepository(db),
         token_repo=SqlApiTokenRepository(db),
     )
-    tokens = await auth_svc.list_api_tokens()
+    if machine_id is not None:
+        tokens = await auth_svc.list_api_tokens_for_machine(machine_id)
+    else:
+        tokens = await auth_svc.list_api_tokens()
     return [
         TokenListItem(
             id=t.id,
             name=t.name,
             prefix=t.prefix,
+            machine_id=t.machine_id,
             created_at=t.created_at.isoformat(),
             last_used_at=t.last_used_at.isoformat() if t.last_used_at else None,
         )

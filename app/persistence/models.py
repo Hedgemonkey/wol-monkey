@@ -209,6 +209,9 @@ class ApiTokenModel(Base):
     user_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    machine_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("machines.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     prefix: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -217,7 +220,10 @@ class ApiTokenModel(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    __table_args__ = (UniqueConstraint("token_hash", name="uq_api_tokens_hash"),)
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_api_tokens_hash"),
+        Index("ix_api_tokens_machine_id", "machine_id"),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -192,10 +192,13 @@ async function generateToken() {
   errEl.classList.add('hidden');
 
   try {
+    const machineId = document.getElementById('s-machine-id') ? document.getElementById('s-machine-id').value : null;
+    const payload = { name: 'SSH auto-wake', scopes: {} };
+    if (machineId) payload.machine_id = machineId;
     const data = await apiFetch('/api/auth/tokens', {
       method: 'POST',
       headers: { 'X-CSRF-Token': CSRF },
-      body: JSON.stringify({ name: 'SSH auto-wake', scopes: {} }),
+      body: JSON.stringify(payload),
     });
 
     const raw = data.raw_token;

@@ -374,6 +374,39 @@ async def machine_edit_post(
 
 
 # ---------------------------------------------------------------------------
+# Token management page
+# ---------------------------------------------------------------------------
+@router.get("/tokens", response_class=HTMLResponse)
+async def tokens_page(request: Request, db: DbSession) -> Response:
+    _session, user = await _require_web_auth(request, db)
+    if user is None:
+        return _redirect("/login")
+    machines = await SqlMachineRepository(db).list_all()
+    csrf = await _get_csrf(request, db)
+    # Fetch active tokens and group by machine_id
+    auth_svc = get_auth_service(
+        user_repo=SqlUserRepository(db),
+        session_repo=SqlSessionRepository(db),
+        token_repo=SqlApiTokenRepository(db),
+    )
+    all_tokens = await auth_svc.list_api_tokens()
+    # Build machine_id -> token list map; None key = global tokens
+    tokens_by_machine: dict[str | None, list[object]] = {}
+    for t in all_tokens:
+        tokens_by_machine.setdefault(t.machine_id, []).append(t)
+
+    return templates.TemplateResponse(
+        request,
+        "tokens.html",
+        {
+            "machines": machines,
+            "tokens_by_machine": tokens_by_machine,
+            "csrf_token": csrf,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # SSH Auto-Wake setup guide
 # ---------------------------------------------------------------------------
 @router.get("/ssh-setup", response_class=HTMLResponse)

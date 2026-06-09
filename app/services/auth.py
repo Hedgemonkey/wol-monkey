@@ -108,14 +108,23 @@ class AuthService:
     # API token management
     # ------------------------------------------------------------------
     async def create_api_token(
-        self, name: str, scopes: dict[str, object], user_id: str
+        self,
+        name: str,
+        scopes: dict[str, object],
+        user_id: str,
+        machine_id: str | None = None,
     ) -> tuple[str, ApiTokenRecord]:
         """Returns (raw_token, record). raw_token shown once — never stored."""
         raw, prefix, token_hash = generate_token()
         record = await self._tokens.create(
-            name=name, token_hash=token_hash, prefix=prefix, scopes=scopes, user_id=user_id
+            name=name,
+            token_hash=token_hash,
+            prefix=prefix,
+            scopes=scopes,
+            user_id=user_id,
+            machine_id=machine_id,
         )
-        logger.info("api_token_created", token_id=record.id, name=name)
+        logger.info("api_token_created", token_id=record.id, name=name, machine_id=machine_id)
         return raw, record
 
     async def validate_api_token(self, raw_token: str) -> ApiTokenRecord:
@@ -134,3 +143,6 @@ class AuthService:
 
     async def list_api_tokens(self) -> list[ApiTokenRecord]:
         return await self._tokens.list_active()
+
+    async def list_api_tokens_for_machine(self, machine_id: str) -> list[ApiTokenRecord]:
+        return await self._tokens.list_for_machine(machine_id)
