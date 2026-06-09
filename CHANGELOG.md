@@ -54,16 +54,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Phase 4 — Settings and setup wizard**
 - `SettingsService`: typed `get_str/get_int/get_bool/set/get_all` delegating to `SettingsRepository`
 - `SetupStateService`: five-step wizard state machine with `advance()`, `reset()`, `is_complete()`
-- Setup wizard API: `GET /setup/status`, `POST /setup/admin`, `POST /setup/network`,
-  `POST /setup/complete` — all return 410 after wizard completes
+- Setup wizard API: `GET /api/setup/status`, `POST /api/setup/admin`, `POST /api/setup/network`,
+  `POST /api/setup/complete` — all return 410 after wizard completes
 - 23 new tests; 118 total
 
 **Phase 5 — Machines CRUD + wake API**
-- `GET/POST /machines`, `GET/PATCH/DELETE /machines/{id}` — full CRUD with session auth + CSRF
-- `POST /machines/{id}/wake` — queues job via worker (session + CSRF)
-- `POST /machines/{id}/wake/direct` — direct wake with API token (for automation)
-- `GET /machines/{id}/attempts/{aid}` — attempt status polling
-- `GET /machines/{id}/status` — live ping + TCP probe result
+- `GET/POST /api/machines`, `GET/PATCH/DELETE /api/machines/{id}` — full CRUD with session auth + CSRF
+- `POST /api/machines/{id}/wake` — queues job via worker (session + CSRF)
+- `POST /api/machines/{id}/wake/direct` — direct wake with API token (for automation)
+- `GET /api/machines/{id}/attempts/{aid}` — attempt status polling
+- `GET /api/machines/{id}/status` — live ping + TCP-SSH probe result
 - FastAPI `dependency_overrides` pattern established in tests for isolation
 - 11 new API tests; 129 total
 
@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shared JS helpers (`app/static/js/app.js`): `getCsrf()`, `apiFetch()`
 - `web_router` serving all server-rendered pages; `StaticFiles` mount at `/static`
 - Web session guard (`_require_web_auth`) on all machine/settings pages
+- Web form login at `POST /auth/login` (separate from JSON API at `POST /api/auth/login`)
 
 **Phase 7 — Deployment**
 - `Dockerfile`: single image for API + worker; includes `etherwake` + `iputils-ping`
@@ -82,9 +83,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Worker uses `network_mode: host` + `cap_add: NET_RAW` for L2 wake
   - `depends_on` with health-checks ensures migration runs before app/worker start
 - `Caddyfile`: HTTPS reverse-proxy with security headers
-- `.env.example`: updated with `POSTGRES_*` vars for docker-compose
+- `.env.example`: all supported vars documented with descriptions
 - `README.md`: full Quick Start, API reference, configuration table, wake strategy guide,
-  deployment options, and developer workflow
+  deployment options, developer workflow, and Playwright-generated screenshots
+
+**Phase 8 — Live testing + security hardening**
+- Fixed `WakeStrategy` enum: renamed `UDP = "udp"` → `UDP_BROADCAST = "udp_broadcast"`
+  throughout domain, infra, templates, tests; Alembic migration `7da1313001d6` to backfill data
+- Fixed `WakeRequest` schema: `strategy_override: str | None` replaced with
+  `strategy: WakeStrategy | None` — invalid values now return 422 instead of passing through
+- Fixed wake endpoint FK violation: `await db.commit()` before `queue.enqueue()` so the
+  `wake_attempt` row is visible to the worker's separate session
+- Fixed MAC address validation: added `_MAC_RE` regex validator to `MachineCreate` and
+  `MachineUpdate` — rejects 5-group MACs (`00:00:00:00:00`), invalid hex, wrong separators
+- Fixed IP address validation: `ipaddress.ip_address()` check on `ip_address` and
+  `broadcast_address` fields in `MachineCreate` — prevents asyncpg MACADDR/INET crash
+- Added `_is_valid_uuid` guard in all repository `get_by_id`, `update`, `delete` methods —
+  malformed IDs return `None` / no-op instead of propagating `asyncpg.DataError`
+- Added `user_id` to `ApiTokenRecord` and `SqlApiTokenRepository.create` —
+  Alembic migration `09d75b0dfde5` adds column with backfill
+- Added `get_user_from_session_or_token` combined dependency — all read endpoints now accept
+  either a session cookie or a `Authorization: Bearer wm_<prefix>_<secret>` token
+- Added `tests/_security_audit.py`: 74-check live security and functional audit covering
+  unauthenticated access, CSRF bypass, MAC/IP/strategy input fuzzing, session revocation,
+  UUID injection, content-type confusion, API token isolation, CSRF reuse, live TCP-SSH probe,
+  and wake packet dispatch monitoring against real hardware (Fedora PC at 172.24.0.2)
 
 ---
 
