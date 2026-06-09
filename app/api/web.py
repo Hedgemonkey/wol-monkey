@@ -373,6 +373,9 @@ async def machine_edit_post(
         return _redirect("/login")
     repo = SqlMachineRepository(db)
     csrf = await _get_csrf(request, db)
+    # Sanitise fields — empty string or literal "None" -> None
+    def _clean(v: str) -> str | None:
+        return v.strip() or None if v.strip() not in ("", "None") else None
     try:
         updated = await repo.update(
             machine_id,
@@ -380,15 +383,17 @@ async def machine_edit_post(
             ip_address=ip_address,
             mac_address=mac_address,
             ssh_port=ssh_port,
-            hostname=hostname or None,
-            wake_interface=wake_interface or None,
+            hostname=_clean(hostname),
+            wake_interface=_clean(wake_interface),
             wake_strategy=wake_strategy,
-            broadcast_address=broadcast_address or None,
+            broadcast_address=_clean(broadcast_address),
             enabled=enabled == "1",
         )
         if updated is None:
             return _redirect("/machines")
     except Exception as exc:
+        # Session may be poisoned by a failed flush — rollback before any further DB use
+        await db.rollback()
         machine = await repo.get_by_id(machine_id)
         return templates.TemplateResponse(
             request,
@@ -442,8 +447,13 @@ async def ssh_setup_page(request: Request, db: DbSession) -> Response:
         return _redirect("/login")
     machines = await SqlMachineRepository(db).list_all()
     csrf = await _get_csrf(request, db)
-    # Derive the public base URL from the incoming request
     base_url = str(request.base_url).rstrip("/")
+    auth_svc = get_auth_service(
+        user_repo=SqlUserRepository(db),
+        session_repo=SqlSessionRepository(db),
+        token_repo=SqlApiTokenRepository(db),
+    )
+    token_count = len(await auth_svc.list_api_tokens())
     return templates.TemplateResponse(
         request,
         "ssh_setup.html",
@@ -451,6 +461,7 @@ async def ssh_setup_page(request: Request, db: DbSession) -> Response:
             "machines": machines,
             "csrf_token": csrf,
             "base_url": base_url,
+            "token_count": token_count,
         },
     )
 

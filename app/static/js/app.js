@@ -18,5 +18,7 @@ async function apiFetch(url, options = {}) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }));
     throw new Error(err.detail || resp.statusText);
   }
-  return resp.json();
+  if (resp.status === 204 || resp.headers.get('content-length') === '0') return null;
+  const ct = resp.headers.get('content-type') || '';
+  return ct.includes('application/json') ? resp.json() : null;
 }

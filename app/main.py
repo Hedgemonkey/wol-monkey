@@ -9,9 +9,10 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import HTMLResponse, Response
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
@@ -91,6 +92,30 @@ def create_app() -> FastAPI:
 
     # Static files (CSS / JS)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+    # Styled error handlers
+    _templates = Jinja2Templates(directory=str(pathlib.Path(__file__).parent / "templates"))
+
+    @app.exception_handler(500)
+    async def internal_error_handler(request: Request, exc: Exception) -> HTMLResponse:
+        logger.error("unhandled_exception", path=request.url.path, error=str(exc))
+        return _templates.TemplateResponse(
+            request,
+            "error.html",
+            {"status_code": 500, "detail": "An unexpected error occurred."},
+            status_code=500,
+        )
+
+    @app.exception_handler(404)
+    async def not_found_handler(request: Request, exc: Exception) -> HTMLResponse:
+        if request.url.path.startswith("/api/"):
+            return Response(content='{"detail":"Not found"}', status_code=404, media_type="application/json")
+        return _templates.TemplateResponse(
+            request,
+            "error.html",
+            {"status_code": 404, "detail": "Page not found."},
+            status_code=404,
+        )
 
     return app
 

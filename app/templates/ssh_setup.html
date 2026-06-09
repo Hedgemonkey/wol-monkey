@@ -25,18 +25,63 @@
 
   {# ── Step 1: generate token ────────────────────────────────────────────── #}
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
-    <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
-      Step 1 — Generate a dedicated API token
-    </h2>
-    <p class="text-sm text-gray-600">
-      This creates a read + wake token scoped only to this use-case.
-      The token is shown <strong>once</strong> — copy it before leaving this page.
-    </p>
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+          Step 1 — Generate a dedicated API token
+        </h2>
+        <p class="text-sm text-gray-600 mt-1">
+          This creates a read + wake token scoped only to this use-case.
+          The token is shown <strong>once</strong> — copy it before leaving this page.
+        </p>
+      </div>
+      <a href="/tokens" class="shrink-0 text-xs text-indigo-600 hover:underline whitespace-nowrap">
+        Manage all tokens →
+      </a>
+    </div>
 
-    <div id="token-create-area">
+    {# Token count — always visible, colour-coded by risk level #}
+    {% if token_count >= 5 %}
+    <div class="flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+      <svg class="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+      <span><strong>{{ token_count }} active tokens</strong> — this is a lot. Each token is a credential that can wake your machines. <a href="/tokens" class="underline font-medium">Revoke unused ones</a> before creating more.</span>
+    </div>
+    {% elif token_count >= 3 %}
+    <div class="flex items-start gap-3 rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-700">
+      <svg class="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 000-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+      <span><strong>{{ token_count }} active tokens.</strong> Keep the number low — consider <a href="/tokens" class="underline font-medium">revoking unused ones</a> to minimise your attack surface.</span>
+    </div>
+    {% elif token_count > 0 %}
+    <div class="flex items-start gap-3 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+      <svg class="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+      <span><strong>{{ token_count }} active token{{ 's' if token_count != 1 else '' }}.</strong> Looking good — you can manage them on the <a href="/tokens" class="underline font-medium">API Tokens</a> page.</span>
+    </div>
+    {% else %}
+    <div class="flex items-start gap-3 rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
+      <svg class="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+      <span><strong>No active tokens.</strong> Generate one below to get started.</span>
+    </div>
+    {% endif %}
+
+    <div id="token-create-area" class="space-y-3">
+      {# Machine scope selector #}
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="token-scope">
+          Scope this token to
+        </label>
+        <select id="token-scope"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <option value="">Global — can wake any machine</option>
+          {% for m in machines %}
+          <option value="{{ m.id }}">{{ m.name }} ({{ m.ip_address }})</option>
+          {% endfor %}
+        </select>
+        <p class="text-xs text-gray-400 mt-1">Scoping to a specific machine is more secure.</p>
+      </div>
+
       <button id="btn-generate-token"
               onclick="generateToken()"
-              class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2 text-sm transition-colors">
+              class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2.5 text-sm transition-colors">
         Generate SSH wake token
       </button>
       <p id="token-error" class="hidden mt-2 text-sm text-red-600"></p>
@@ -99,7 +144,9 @@
           Copy
         </button>
         <pre id="script-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed">mkdir -p ~/.config/wol-monkey
-echo "<span id='s-token' class='text-yellow-300'>PASTE_YOUR_TOKEN_HERE</span>" &gt; ~/.config/wol-monkey/token
+read -rsp 'Paste your WoL-Monkey token: ' _TOKEN &amp;&amp; echo
+echo "$_TOKEN" &gt; ~/.config/wol-monkey/token
+unset _TOKEN
 chmod 600 ~/.config/wol-monkey/token
 
 install -Dm 755 /dev/stdin ~/.local/bin/wol-wake &lt;&lt; 'EOF'
@@ -136,46 +183,76 @@ echo "Installed. Make sure ~/.local/bin is on your PATH."</pre>
     {# Windows WSL2 #}
     <div id="panel-win-wsl" class="hidden space-y-2">
       <p class="text-xs text-gray-500">
-        Install the bash script inside your WSL2 distro exactly as in the Linux tab.
-        Then reference it from your <strong>Windows</strong> SSH config:
+        Run this inside your WSL2 distro. Requires
+        <code class="font-mono bg-gray-100 px-1 rounded">curl</code> and
+        <code class="font-mono bg-gray-100 px-1 rounded">jq</code>
+        (<code class="font-mono bg-gray-100 px-1 rounded">sudo apt install curl jq</code>).
       </p>
       <div class="relative">
-        <button onclick="copyBlock('wsl-ssh-block')"
+        <button onclick="copyBlock('wsl-script-block')"
                 class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
           Copy
         </button>
-        <pre id="wsl-ssh-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed"># %USERPROFILE%\.ssh\config
-Host &lt;host-alias&gt;
-    HostName &lt;machine-ip-or-hostname&gt;
-    User &lt;your-username&gt;
-    ProxyCommand wsl wol-wake &lt;machine-uuid&gt; %h %p
-    ServerAliveInterval 30
-    ServerAliveCountMax 3</pre>
+        <pre id="wsl-script-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed">mkdir -p ~/.config/wol-monkey
+read -rsp 'Paste your WoL-Monkey token: ' _TOKEN &amp;&amp; echo
+echo "$_TOKEN" &gt; ~/.config/wol-monkey/token
+unset _TOKEN
+chmod 600 ~/.config/wol-monkey/token
+
+install -Dm 755 /dev/stdin ~/.local/bin/wol-wake &lt;&lt; 'EOF'
+#!/usr/bin/env bash
+# wol-wake — auto-wake via WoL-Monkey before SSH connects
+set -euo pipefail
+MACHINE_ID="${1:?machine-id required}"
+SSH_HOST="${2:?ssh-host required}"
+SSH_PORT="${3:-22}"
+WOL_BASE="${WOL_MONKEY_URL:-<span id='wsl-url' class='text-cyan-300'>{{ base_url }}</span>}"
+TOKEN_FILE="${WOL_MONKEY_TOKEN_FILE:-$HOME/.config/wol-monkey/token}"
+TOKEN="${WOL_MONKEY_TOKEN:-$(cat "$TOKEN_FILE" 2&gt;/dev/null)}"
+POLL_TIMEOUT="${WOL_MONKEY_TIMEOUT:-90}"
+if [[ -z "$TOKEN" ]]; then
+  echo "wol-wake: no token — set WOL_MONKEY_TOKEN or create $TOKEN_FILE" &gt;&amp;2; exit 1
+fi
+AUTH=(-H "Authorization: Bearer $TOKEN")
+STATE=$(curl -sf "${AUTH[@]}" \
+  "$WOL_BASE/api/machines/$MACHINE_ID/status" | jq -r '.state' 2&gt;/dev/null || echo "unknown")
+if [[ "$STATE" != "online" ]]; then
+  echo "wol-wake: $STATE — waking..." &gt;&amp;2
+  curl -sf -X POST "${AUTH[@]}" -H "Content-Type: application/json" \
+    -d "{\"ensure_online\":true,\"poll_timeout_s\":$POLL_TIMEOUT}" \
+    "$WOL_BASE/api/machines/$MACHINE_ID/wake/direct" &gt;/dev/null || true
+  echo "wol-wake: connecting" &gt;&amp;2
+fi
+exec nc "$SSH_HOST" "$SSH_PORT"
+EOF
+
+echo "Installed. Make sure ~/.local/bin is on your PATH."</pre>
       </div>
+      <p class="text-xs text-gray-500 mt-1">Then in Step 3, use <code class="font-mono bg-gray-100 px-1 rounded">ProxyCommand wsl wol-wake &lt;machine-uuid&gt; %h %p</code> in your Windows SSH config.</p>
     </div>
 
     {# Windows PowerShell #}
     <div id="panel-win-ps" class="hidden space-y-2">
       <p class="text-xs text-gray-500">
-        For Windows OpenSSH without WSL. Save as
-        <code class="font-mono bg-gray-100 px-1 rounded">%USERPROFILE%\wol-wake.ps1</code>
-        and store your token in
-        <code class="font-mono bg-gray-100 px-1 rounded">%APPDATA%\wol-monkey\token</code>.
+        For Windows OpenSSH without WSL. Paste this once into a PowerShell terminal — it will
+        prompt for your token and write <code class="font-mono bg-gray-100 px-1 rounded">wol-wake.ps1</code>
+        to your profile folder automatically.
       </p>
       <div class="relative">
-        <button onclick="copyBlock('ps-token-block')"
+        <button onclick="copyBlock('ps-install-block')"
                 class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
-          Copy token store
+          Copy
         </button>
-        <pre id="ps-token-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre leading-relaxed mb-2">New-Item -ItemType Directory -Force "$env:APPDATA\wol-monkey" | Out-Null
-"<span id='s-token-ps' class='text-yellow-300'>PASTE_YOUR_TOKEN_HERE</span>" | Set-Content "$env:APPDATA\wol-monkey\token" -NoNewline</pre>
-      </div>
-      <div class="relative">
-        <button onclick="copyBlock('ps-script-block')"
-                class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
-          Copy script
-        </button>
-        <pre id="ps-script-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed"># wol-wake.ps1 — save as %USERPROFILE%\wol-wake.ps1
+        <pre id="ps-install-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-4 overflow-x-auto whitespace-pre leading-relaxed"># Step 1 — store your token
+New-Item -ItemType Directory -Force "$env:APPDATA\wol-monkey" | Out-Null
+$_token = Read-Host -AsSecureString 'Paste your WoL-Monkey token'
+[System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($_token)
+) | Set-Content "$env:APPDATA\wol-monkey\token" -NoNewline
+Remove-Variable _token
+
+# Step 2 — write the wol-wake.ps1 script
+@'
 param(
     [Parameter(Mandatory)][string]$MachineId,
     [Parameter(Mandatory)][string]$SshHost,
@@ -197,48 +274,53 @@ try {
         Write-Host "wol-wake: online — connecting" -ForegroundColor Green
     }
 } catch { Write-Warning "wol-wake: API error — connecting anyway" }
-&amp; "$env:SystemRoot\System32\OpenSSH\ssh.exe" -W "${SshHost}:${SshPort}" localhost</pre>
+&amp; "$env:SystemRoot\System32\OpenSSH\ssh.exe" -W "${SshHost}:${SshPort}" localhost
+'@ | Set-Content "$env:USERPROFILE\wol-wake.ps1" -Encoding UTF8
+
+Write-Host "Installed to $env:USERPROFILE\wol-wake.ps1" -ForegroundColor Green</pre>
       </div>
-      <p class="text-xs text-gray-500">
-        SSH config entry for Windows (<code class="font-mono bg-gray-100 px-1 rounded">%USERPROFILE%\.ssh\config</code>):
-      </p>
-      <div class="relative">
-        <button onclick="copyBlock('ps-ssh-block')"
-                class="absolute top-2 right-2 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors">
-          Copy
-        </button>
-        <pre id="ps-ssh-block" class="font-mono text-xs bg-gray-900 text-gray-100 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre leading-relaxed">Host &lt;host-alias&gt;
-    HostName &lt;machine-ip-or-hostname&gt;
-    User &lt;your-username&gt;
-    ProxyCommand powershell -File %USERPROFILE%\wol-wake.ps1 &lt;machine-uuid&gt; %h %p
-    ServerAliveInterval 30
-    ServerAliveCountMax 3</pre>
-      </div>
+      <p class="text-xs text-gray-500 mt-1">Then in Step 3, use <code class="font-mono bg-gray-100 px-1 rounded">ProxyCommand powershell -File %USERPROFILE%\wol-wake.ps1 &lt;machine-uuid&gt; %h %p</code> in your SSH config.</p>
     </div>
   </div>
 
   {# ── Step 3: SSH config ────────────────────────────────────────────────── #}
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
     <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
-      Step 3 — Add to <code class="font-mono normal-case">~/.ssh/config</code>
+      Step 3 — Add to your SSH config
     </h2>
     <p class="text-sm text-gray-600">
-      Pick the machine(s) you want to auto-wake. Copy the relevant block into
-      <code class="font-mono bg-gray-100 px-1 rounded">~/.ssh/config</code> on your client.
+      Add the relevant block to your SSH config on your client machine. The tab syncs with your Step 2 selection.
     </p>
 
+    {# OS tab switcher — mirrors Step 2 #}
+    <div class="flex gap-1 border-b border-gray-200">
+      <button id="s3-tab-unix" onclick="switchTab('unix')"
+              class="px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 border-gray-200 bg-indigo-600 text-white -mb-px">
+        Linux / macOS
+      </button>
+      <button id="s3-tab-win-wsl" onclick="switchTab('win-wsl')"
+              class="px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 border-gray-200 bg-white text-gray-600 hover:bg-gray-50 -mb-px">
+        Windows (WSL2)
+      </button>
+      <button id="s3-tab-win-ps" onclick="switchTab('win-ps')"
+              class="px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 border-gray-200 bg-white text-gray-600 hover:bg-gray-50 -mb-px">
+        Windows (PowerShell)
+      </button>
+    </div>
+
     {% if machines %}
-    <div class="space-y-4">
+
+    {# Linux / macOS panel #}
+    <div id="s3-panel-unix" class="space-y-4">
+      <p class="text-xs text-gray-500">Add to <code class="font-mono bg-gray-100 px-1 rounded">~/.ssh/config</code> on your Linux or macOS machine.</p>
       {% for m in machines %}
       <div class="border border-gray-200 rounded-lg overflow-hidden">
         <div class="flex items-center justify-between bg-gray-50 px-4 py-2 border-b border-gray-200">
           <span class="font-semibold text-sm text-gray-800">{{ m.name }}</span>
-          <button onclick="copyBlock('ssh-block-{{ loop.index }}')"
-                  class="rounded border border-gray-300 bg-white hover:bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 transition-colors">
-            Copy
-          </button>
+          <button onclick="copyBlock('ssh-unix-{{ loop.index }}')"
+                  class="rounded border border-gray-300 bg-white hover:bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 transition-colors">Copy</button>
         </div>
-        <pre id="ssh-block-{{ loop.index }}" class="font-mono text-xs bg-gray-900 text-gray-100 px-4 py-3 overflow-x-auto whitespace-pre leading-relaxed"># ~/.ssh/config — {{ m.name }}
+        <pre id="ssh-unix-{{ loop.index }}" class="font-mono text-xs bg-gray-900 text-gray-100 px-4 py-3 overflow-x-auto whitespace-pre leading-relaxed"># ~/.ssh/config — {{ m.name }}
 Host {{ m.name | lower | replace(' ', '-') }}
     HostName {{ m.hostname or m.ip_address }}
     User YOUR_USERNAME
@@ -253,6 +335,59 @@ Host {{ m.name | lower | replace(' ', '-') }}
       </div>
       {% endfor %}
     </div>
+
+    {# Windows WSL2 panel #}
+    <div id="s3-panel-win-wsl" class="hidden space-y-4">
+      <p class="text-xs text-gray-500">Add to <code class="font-mono bg-gray-100 px-1 rounded">%USERPROFILE%\.ssh\config</code> on Windows. The ProxyCommand runs <code class="font-mono bg-gray-100 px-1 rounded">wol-wake</code> inside your WSL2 distro.</p>
+      {% for m in machines %}
+      <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="flex items-center justify-between bg-gray-50 px-4 py-2 border-b border-gray-200">
+          <span class="font-semibold text-sm text-gray-800">{{ m.name }}</span>
+          <button onclick="copyBlock('ssh-wsl-{{ loop.index }}')"
+                  class="rounded border border-gray-300 bg-white hover:bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 transition-colors">Copy</button>
+        </div>
+        <pre id="ssh-wsl-{{ loop.index }}" class="font-mono text-xs bg-gray-900 text-gray-100 px-4 py-3 overflow-x-auto whitespace-pre leading-relaxed"># %USERPROFILE%\.ssh\config — {{ m.name }}
+Host {{ m.name | lower | replace(' ', '-') }}
+    HostName {{ m.hostname or m.ip_address }}
+    User YOUR_USERNAME
+    ProxyCommand wsl wol-wake {{ m.id }} %h %p
+    ServerAliveInterval 30
+    ServerAliveCountMax 3</pre>
+        <div class="bg-gray-50 border-t border-gray-200 px-4 py-2 flex flex-wrap gap-4 text-xs text-gray-500">
+          <span>IP: <code class="font-mono">{{ m.ip_address }}</code></span>
+          <span>MAC: <code class="font-mono">{{ m.mac_address }}</code></span>
+          <span>Machine ID: <code class="font-mono select-all">{{ m.id }}</code></span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# Windows PowerShell panel #}
+    <div id="s3-panel-win-ps" class="hidden space-y-4">
+      <p class="text-xs text-gray-500">Add to <code class="font-mono bg-gray-100 px-1 rounded">%USERPROFILE%\.ssh\config</code> on Windows.</p>
+      {% for m in machines %}
+      <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="flex items-center justify-between bg-gray-50 px-4 py-2 border-b border-gray-200">
+          <span class="font-semibold text-sm text-gray-800">{{ m.name }}</span>
+          <button onclick="copyBlock('ssh-ps-{{ loop.index }}')"
+                  class="rounded border border-gray-300 bg-white hover:bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 transition-colors">Copy</button>
+        </div>
+        <pre id="ssh-ps-{{ loop.index }}" class="font-mono text-xs bg-gray-900 text-gray-100 px-4 py-3 overflow-x-auto whitespace-pre leading-relaxed"># %USERPROFILE%\.ssh\config — {{ m.name }}
+Host {{ m.name | lower | replace(' ', '-') }}
+    HostName {{ m.hostname or m.ip_address }}
+    User YOUR_USERNAME
+    ProxyCommand powershell -File %USERPROFILE%\wol-wake.ps1 {{ m.id }} %h %p
+    ServerAliveInterval 30
+    ServerAliveCountMax 3</pre>
+        <div class="bg-gray-50 border-t border-gray-200 px-4 py-2 flex flex-wrap gap-4 text-xs text-gray-500">
+          <span>IP: <code class="font-mono">{{ m.ip_address }}</code></span>
+          <span>MAC: <code class="font-mono">{{ m.mac_address }}</code></span>
+          <span>Machine ID: <code class="font-mono select-all">{{ m.id }}</code></span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
     {% else %}
     <p class="text-sm text-gray-500 italic">No machines configured yet — add one from the
       <a href="/machines" class="text-indigo-600 hover:underline">Machines</a> page first.</p>
@@ -296,7 +431,7 @@ async function generateToken() {
   errEl.classList.add('hidden');
 
   try {
-    const machineId = document.getElementById('s-machine-id') ? document.getElementById('s-machine-id').value : null;
+    const machineId = document.getElementById('token-scope').value || null;
     const payload = { name: 'SSH auto-wake', scopes: {} };
     if (machineId) payload.machine_id = machineId;
     const data = await apiFetch('/api/auth/tokens', {
@@ -310,7 +445,7 @@ async function generateToken() {
     document.getElementById('token-create-area').classList.add('hidden');
     document.getElementById('token-result').classList.remove('hidden');
 
-    // Pre-fill token in all script blocks (Linux + PowerShell)
+    // Pre-fill token placeholder in all script blocks (Linux, WSL2, PowerShell)
     ['s-token', 's-token-ps'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.textContent = raw; el.className = 'text-yellow-300'; }
@@ -339,16 +474,26 @@ function copyBlock(id) {
 const TABS = ['unix', 'win-wsl', 'win-ps'];
 function switchTab(name) {
   TABS.forEach(t => {
+    const active = t === name;
+    // Step 2
     const panel = document.getElementById('panel-' + t);
     const btn   = document.getElementById('tab-' + t);
-    if (t === name) {
-      panel.classList.remove('hidden');
-      btn.classList.add('bg-indigo-600', 'text-white');
-      btn.classList.remove('bg-white', 'text-gray-600');
-    } else {
-      panel.classList.add('hidden');
-      btn.classList.remove('bg-indigo-600', 'text-white');
-      btn.classList.add('bg-white', 'text-gray-600');
+    if (panel) panel.classList.toggle('hidden', !active);
+    if (btn) {
+      btn.classList.toggle('bg-indigo-600', active);
+      btn.classList.toggle('text-white', active);
+      btn.classList.toggle('bg-white', !active);
+      btn.classList.toggle('text-gray-600', !active);
+    }
+    // Step 3 — same tab names, prefixed s3-
+    const s3panel = document.getElementById('s3-panel-' + t);
+    const s3btn   = document.getElementById('s3-tab-' + t);
+    if (s3panel) s3panel.classList.toggle('hidden', !active);
+    if (s3btn) {
+      s3btn.classList.toggle('bg-indigo-600', active);
+      s3btn.classList.toggle('text-white', active);
+      s3btn.classList.toggle('bg-white', !active);
+      s3btn.classList.toggle('text-gray-600', !active);
     }
   });
 }
