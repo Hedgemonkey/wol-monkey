@@ -206,10 +206,12 @@ async def machine_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Machine not found")
 
     probe = StateProbe()
+    host = machine.hostname or machine.ip_address
     result = await probe.probe(
         machine_id=machine_id,
-        host=machine.hostname or machine.ip_address,
+        host=host,
         ssh_port=machine.ssh_port,
+        ip_fallback=machine.ip_address if machine.hostname else None,
     )
     return MachineStatusResponse(
         machine_id=machine_id,

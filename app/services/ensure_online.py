@@ -81,7 +81,12 @@ class EnsureOnlineService:
                 logger.warning("ensure_online_timeout", attempt_id=attempt_id, elapsed=elapsed)
                 return AttemptStatus.TIMEOUT
 
-            result = await self._probe.probe(machine.id, host, machine.ssh_port)
+            result = await self._probe.probe(
+                machine.id,
+                host,
+                machine.ssh_port,
+                ip_fallback=machine.ip_address if machine.hostname else None,
+            )
             if result.derived_state == ProbeState.ONLINE:
                 await self._attempts.update_status(
                     attempt_id,

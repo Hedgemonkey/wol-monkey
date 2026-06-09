@@ -30,12 +30,31 @@ class StateProbe:
         self._ping_timeout = ping_timeout
         self._tcp_timeout = tcp_timeout
 
-    async def probe(self, machine_id: str, host: str, ssh_port: int = _SSH_PORT) -> ProbeResult:
+    async def probe(
+        self,
+        machine_id: str,
+        host: str,
+        ssh_port: int = _SSH_PORT,
+        ip_fallback: str | None = None,
+    ) -> ProbeResult:
         ping_ok, tcp_ok = await asyncio.gather(
             self._ping(host),
             self._tcp_connect(host, ssh_port),
             return_exceptions=False,
         )
+        # If hostname probe failed and we have an IP fallback, retry with the IP
+        if not (ping_ok or tcp_ok) and ip_fallback and ip_fallback != host:
+            logger.debug(
+                "probe_hostname_failed_trying_ip",
+                machine_id=machine_id,
+                hostname=host,
+                ip=ip_fallback,
+            )
+            ping_ok, tcp_ok = await asyncio.gather(
+                self._ping(ip_fallback),
+                self._tcp_connect(ip_fallback, ssh_port),
+                return_exceptions=False,
+            )
         result = ProbeResult(
             machine_id=machine_id,
             ping_ok=bool(ping_ok),

@@ -28,6 +28,8 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-wolmonkey}"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -57,10 +59,11 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:8000:8000"
+      - "0.0.0.0:8000:8000"
     volumes:
       - /sys/class/net:/sys/class/net:ro
       - /proc/1/net:/host/proc/net:ro
+      - /etc/hosts:/etc/hosts:ro
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -84,8 +87,7 @@ services:
     # If you use UDP-broadcast strategy only, remove network_mode and
     # keep this service on the bridge network.
     network_mode: host
-    cap_drop:
-      - ALL
+    user: root
     cap_add:
       - NET_RAW
     security_opt:

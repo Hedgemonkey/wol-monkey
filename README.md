@@ -20,9 +20,11 @@
 - **Web UI** — polished dashboard with live machine state (online / offline / waking)
 - **Wake + Ensure-Online** — one-click wake, with optional poll-until-reachable
 - **Authenticated API** — bearer token support for automation / Home Assistant
-- **First-run setup wizard** — guided initial configuration with no manual config files
+- **First-run setup wizard** — guided 5-step configuration with back navigation, step ordering enforcement, and auto-login after account creation
 - **Pluggable wake strategies** — `etherwake` (raw L2) and `udp_broadcast` (no root)
+- **Smart hostname probing** — probes by hostname first, falls back to IP if DNS not resolvable (e.g. entries only in `/etc/hosts`)
 - **Three deployment modes** — local-only, Tailscale/private, or public behind Caddy
+- **Hardened containers** — read-only rootfs, dropped capabilities, no-new-privileges
 
 ---
 
@@ -64,10 +66,12 @@ docker compose --profile caddy up -d
 Navigate to `http://<host>:8000` (or your Caddy domain) and follow the five-step wizard:
 
 1. **Welcome**
-2. **Create admin account** — username + password (12+ chars)
-3. **Network config** — wake interface, default strategy, poll timeout
+2. **Create admin account** — username + password (12+ chars, with live strength indicator and show/hide toggle)
+3. **Network config** — wake interface (virtual interfaces hidden by default, checkbox to reveal), default strategy, poll timeout
 4. **Add first machine** — or skip and add later from the dashboard
 5. **Complete** 🎉
+
+> Steps enforce ordering — you cannot jump ahead. Back navigation is available on each step.
 
 ---
 
@@ -150,8 +154,12 @@ the database and managed via the **Settings** page in the UI.
 | etherwake | `etherwake` | Layer-2 magic packet via `etherwake` binary | `CAP_NET_RAW`, same L2 segment |
 | UDP broadcast | `udp_broadcast` | Magic packet over UDP to port 9 | None — works across subnets with directed broadcast |
 
-The worker container uses `network_mode: host` and `cap_add: [NET_RAW]` for `etherwake`.
-If you use `udp_broadcast` only, you can remove those from `docker-compose.yml`.
+The worker container uses `network_mode: host`, `user: root`, and `cap_add: [NET_RAW]` for `etherwake`.
+`etherwake` requires root (it checks `geteuid() == 0`, not just capabilities); the worker is scoped solely to wake jobs.
+If you use `udp_broadcast` only, you can remove `user: root`, `network_mode: host`, and `cap_add` from `docker-compose.yml`.
+
+> **Note:** Because the worker uses `network_mode: host`, the `db` service publishes its port
+> to `127.0.0.1:5432` so the worker can reach Postgres via localhost.
 
 ---
 
@@ -173,6 +181,10 @@ web/API routes  →  services  →  domain (pure Python, zero framework imports)
 - Passwords use Argon2id; API tokens are SHA-256 hashed at rest, shown once on creation
 - UUID validation in all repository methods prevents asyncpg `DataError` on malformed IDs
 - Combined `Session | Bearer` auth dependency on all read endpoints
+- Status probe tries hostname first, falls back to `ip_address` if DNS resolution fails
+- Host `/etc/hosts` bind-mounted read-only into the app container so local hostname entries resolve
+- Security headers middleware (CSP, HSTS, X-Frame-Options, Referrer-Policy) on every response
+- In-process login rate limiter (per-IP) — single gunicorn worker ensures shared state
 
 ---
 
@@ -196,6 +208,9 @@ WoL-Monkey is designed secure-by-default:
 - Privileged wake operations (`CAP_NET_RAW`) isolated in the worker container
 - Caddy provides automatic TLS + `Strict-Transport-Security` + `X-Frame-Options`
 - All inputs validated by Pydantic (MAC regex, IP address, enum values) before hitting the DB
+- Security headers on every response: `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`
+- Per-IP login rate limiting (in-process, single worker)
+- Containers run with `read_only: true`, `no-new-privileges`, and minimal capabilities
 
 ---
 
