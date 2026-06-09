@@ -161,6 +161,13 @@ async def setup_network_post(
     return _redirect("/setup/first_machine")
 
 
+@router.post("/setup/{step}/back", response_class=HTMLResponse)
+async def setup_back(step: str, db: DbSession) -> Response:
+    setup_svc = SetupStateService(SqlSetupStateRepository(db))
+    prev = await setup_svc.go_back(step)
+    return _redirect(f"/setup/{prev}")
+
+
 @router.post("/setup/skip_machine", response_class=HTMLResponse)
 async def setup_skip_machine(db: DbSession) -> Response:
     setup_svc = SetupStateService(SqlSetupStateRepository(db))

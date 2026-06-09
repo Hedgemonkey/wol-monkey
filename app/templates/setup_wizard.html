@@ -47,6 +47,12 @@
     {# ── Admin account ────────────────────────────────────────────────────── #}
     {% elif step == 'admin_account' %}
     <h2 class="text-lg font-semibold mb-4">Create Admin Account</h2>
+    <form method="post" action="/setup/admin_account/back" class="mb-3">
+      <button type="submit" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+    </form>
     <form method="post" action="/setup/admin" id="admin-form" class="space-y-3" novalidate>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1" for="username">Username</label>
@@ -86,6 +92,12 @@
     {# ── Network ──────────────────────────────────────────────────────────── #}
     {% elif step == 'network' %}
     <h2 class="text-lg font-semibold mb-4">Network Configuration</h2>
+    <form method="post" action="/setup/network/back" class="mb-3">
+      <button type="submit" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+    </form>
     <form method="post" action="/setup/network" class="space-y-4">
 
       <div>
@@ -138,6 +150,12 @@
     {# ── First machine ────────────────────────────────────────────────────── #}
     {% elif step == 'first_machine' %}
     <h2 class="text-lg font-semibold mb-2">Add Your First Machine</h2>
+    <form method="post" action="/setup/first_machine/back" class="mb-3">
+      <button type="submit" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+    </form>
     <p class="text-sm text-gray-600 mb-4">
       Add a machine to wake now, or skip and add them later from the dashboard.
     </p>

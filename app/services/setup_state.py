@@ -56,6 +56,31 @@ class SetupStateService:
         )
         logger.info("wizard_step_advanced", from_step=step, to_step=next_step)
 
+    async def go_back(self, from_step: str) -> str:
+        """Retreat one step: un-complete the current step and return to the previous one."""
+        record = await self._repo.get()
+        completed_steps: dict[str, object] = dict(record.completed_steps)
+
+        try:
+            idx = WIZARD_STEPS.index(from_step)
+        except ValueError:
+            return from_step
+
+        if idx == 0:
+            return WIZARD_STEPS[0]
+
+        prev_step = WIZARD_STEPS[idx - 1]
+        completed_steps.pop(from_step, None)
+        completed_steps.pop(prev_step, None)
+
+        await self._repo.update(
+            completed=False,
+            current_step=prev_step,
+            completed_steps=completed_steps,
+        )
+        logger.info("wizard_step_back", from_step=from_step, to_step=prev_step)
+        return prev_step
+
     async def reset(self) -> None:
         await self._repo.update(
             completed=False,
