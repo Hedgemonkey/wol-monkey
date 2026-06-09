@@ -2,15 +2,49 @@
 {% block title %}{{ "Edit" if machine else "Add" }} Machine{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto">
-  <h1 class="text-2xl font-bold mb-6">{{ "Edit" if machine else "Add" }} Machine</h1>
+<div class="max-w-2xl mx-auto space-y-6">
+  <h1 class="text-2xl font-bold">{{ "Edit" if machine else "Add" }} Machine</h1>
 
   {% if error %}
-  <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
-    {{ error }}
+  <div class="rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">{{ error }}</div>
+  {% endif %}
+
+  {# ── Discovery panel (add mode only) ─────────────────────────────────── #}
+  {% if not machine %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h2 class="font-semibold text-gray-800">Discover Devices</h2>
+        <p class="text-xs text-gray-500 mt-0.5">
+          Devices seen recently by this host's ARP cache. Click a row to fill the form.
+          The device must be <strong>online</strong> and reachable to appear here.
+        </p>
+      </div>
+      <button type="button" onclick="loadDiscovery()"
+              id="btn-refresh"
+              class="flex items-center gap-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium px-3 py-1.5 text-xs transition-colors">
+        <svg id="refresh-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+
+    <div class="flex items-center gap-3 mb-3">
+      <label class="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+        <input type="checkbox" id="toggle-docker" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+        Show Docker / bridge interfaces
+      </label>
+      <span id="discovery-count" class="text-xs text-gray-400"></span>
+    </div>
+
+    <div id="discovery-table" class="text-sm">
+      <div class="text-xs text-gray-400 italic">Loading…</div>
+    </div>
   </div>
   {% endif %}
 
+  {# ── Machine form ─────────────────────────────────────────────────────── #}
   <form method="post"
         action="{{ '/machines/' + machine.id + '/edit' if machine else '/machines/new' }}"
         class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
@@ -18,47 +52,49 @@
     <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
 
     <div class="grid grid-cols-2 gap-4">
+
       <div class="col-span-2">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-        <input name="name" type="text" required
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="f-name">Name *</label>
+        <input id="f-name" name="name" type="text" required
                value="{{ machine.name if machine else '' }}"
+               placeholder="e.g. Gaming PC, NAS, Dev Server"
                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">IP Address *</label>
-        <input name="ip_address" type="text" required
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="f-ip">IP Address *</label>
+        <input id="f-ip" name="ip_address" type="text" required
                value="{{ machine.ip_address if machine else '' }}"
                placeholder="192.168.1.100"
-               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">MAC Address *</label>
-        <input name="mac_address" type="text" required
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="f-mac">MAC Address *</label>
+        <input id="f-mac" name="mac_address" type="text" required
                value="{{ machine.mac_address if machine else '' }}"
                placeholder="aa:bb:cc:dd:ee:ff"
                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">SSH Port</label>
-        <input name="ssh_port" type="number" min="1" max="65535"
-               value="{{ machine.ssh_port if machine else 22 }}"
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="f-hostname">Hostname</label>
+        <input id="f-hostname" name="hostname" type="text"
+               value="{{ machine.hostname if machine else '' }}"
+               placeholder="mybox.local (optional)"
                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Hostname</label>
-        <input name="hostname" type="text"
-               value="{{ machine.hostname if machine else '' }}"
-               placeholder="mybox.local"
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="f-ssh">SSH Port</label>
+        <input id="f-ssh" name="ssh_port" type="number" min="1" max="65535"
+               value="{{ machine.ssh_port if machine else 22 }}"
                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
       </div>
 
       <div class="col-span-2">
-        <label class="block text-sm font-medium text-gray-700 mb-1" for="wake_strategy">Wake Strategy</label>
-        <select id="wake_strategy" name="wake_strategy"
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="f-strategy">Wake Strategy</label>
+        <select id="f-strategy" name="wake_strategy"
                 onchange="updateStrategyHint(this.value)"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
           <option value="etherwake" {% if not machine or machine.wake_strategy == 'etherwake' %}selected{% endif %}>etherwake — Layer 2 magic packet</option>
@@ -68,21 +104,21 @@
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1" for="wake_interface">Wake Interface</label>
-        <select id="wake_interface" name="wake_interface"
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="f-iface">Wake Interface</label>
+        <select id="f-iface" name="wake_interface"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-          <option value="">— use default —</option>
+          <option value="">— use global default —</option>
         </select>
-        <p class="text-xs text-gray-400 mt-1">Override the global default for this machine only.</p>
+        <p class="text-xs text-gray-400 mt-1">Override per-machine. Leave blank to use the global setting.</p>
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1" for="broadcast_address">Broadcast Address</label>
-        <input id="broadcast_address" name="broadcast_address" type="text"
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="f-broadcast">Broadcast Address</label>
+        <input id="f-broadcast" name="broadcast_address" type="text"
                value="{{ machine.broadcast_address if machine else '' }}"
-               placeholder="leave blank to auto-detect"
+               placeholder="auto-detect"
                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
-        <p class="text-xs text-gray-400 mt-1">Only needed for UDP broadcast on non-standard subnets.</p>
+        <p class="text-xs text-gray-400 mt-1">UDP broadcast only — leave blank on standard /24 subnets.</p>
       </div>
 
       <div class="col-span-2 flex items-center gap-2">
@@ -109,6 +145,7 @@
 
 {% block scripts %}
 <script>
+// ── Strategy hint ────────────────────────────────────────────────────────────
 const STRATEGY_HINTS = {
   etherwake: {
     cls: 'border-blue-200 bg-blue-50 text-blue-800',
@@ -116,7 +153,7 @@ const STRATEGY_HINTS = {
            Requires the worker to have <code class="font-mono bg-blue-100 px-1 rounded">CAP_NET_RAW</code>
            and <code class="font-mono bg-blue-100 px-1 rounded">network_mode: host</code> — both set by default
            in the Docker Compose file.
-           <span class="text-blue-600 mt-1 block">Best choice when WoL-Monkey is on the same LAN segment as this machine.</span>`
+           <span class="text-blue-600 mt-1 block">Best choice when WoL-Monkey is on the same LAN as this machine.</span>`
   },
   udp_broadcast: {
     cls: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -125,7 +162,6 @@ const STRATEGY_HINTS = {
            <span class="text-amber-600 mt-1 block">Good choice if etherwake is unavailable or this machine is on a different subnet.</span>`
   }
 };
-
 function updateStrategyHint(val) {
   const el = document.getElementById('strategy-hint');
   if (!el) return;
@@ -135,41 +171,131 @@ function updateStrategyHint(val) {
   el.innerHTML = h.html;
 }
 
-// MAC address auto-formatter — inserts colons as user types
-const macInput = document.querySelector('input[name="mac_address"]');
-if (macInput) {
-  macInput.addEventListener('input', function() {
-    let v = this.value.replace(/[^0-9a-fA-F]/g, '');
-    v = v.slice(0, 12);
-    this.value = v.match(/.{1,2}/g)?.join(':') || v;
-  });
-}
+// ── MAC auto-formatter ───────────────────────────────────────────────────────
+document.getElementById('f-mac')?.addEventListener('input', function() {
+  let v = this.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 12);
+  this.value = v.match(/.{1,2}/g)?.join(':') || v;
+});
 
-// Interface dropdown
-const ifaceSelect = document.getElementById('wake_interface');
+// ── Interface dropdown ───────────────────────────────────────────────────────
 const savedIface = {{ (machine.wake_interface if machine and machine.wake_interface else '') | tojson }};
+const TYPE_ORDER = { ethernet: 0, wifi: 1, bridge: 2, 'docker-bridge': 3, veth: 4, loopback: 5 };
+const TYPE_LABELS = { ethernet: '⬜ Ethernet', wifi: '📶 Wi-Fi', bridge: '🔀 Bridge', 'docker-bridge': '🐳 Docker bridge', veth: '🔗 veth (container)', loopback: '🔁 Loopback' };
+
 fetch('/api/system/interfaces')
   .then(r => r.json())
   .then(ifaces => {
-    ifaces.forEach(iface => {
-      if (iface.is_loopback) return;
+    const sel = document.getElementById('f-iface');
+    if (!sel) return;
+    const filtered = ifaces.filter(i => !i.is_loopback && i.type !== 'veth' && i.type !== 'docker-bridge');
+    filtered.sort((a, b) => (TYPE_ORDER[a.type] ?? 9) - (TYPE_ORDER[b.type] ?? 9));
+    filtered.forEach(iface => {
       const opt = document.createElement('option');
       opt.value = iface.name;
-      opt.textContent = iface.name + (iface.is_up ? ' (up)' : ' (down)');
+      const ip = iface.ip_addresses.length ? ' — ' + iface.ip_addresses[0] : '';
+      const state = iface.is_running ? ' (up)' : ' (down)';
+      opt.textContent = iface.name + ip + state;
       if (iface.name === savedIface) opt.selected = true;
-      ifaceSelect.appendChild(opt);
+      sel.appendChild(opt);
     });
-    if (savedIface && !ifaceSelect.value) {
+    if (savedIface && !sel.value) {
       const opt = document.createElement('option');
-      opt.value = savedIface;
-      opt.textContent = savedIface + ' (not detected)';
-      opt.selected = true;
-      ifaceSelect.appendChild(opt);
+      opt.value = savedIface; opt.textContent = savedIface + ' (not detected)'; opt.selected = true;
+      sel.appendChild(opt);
     }
-  })
-  .catch(() => {});
+  }).catch(() => {});
 
-// Show strategy hint on load
-updateStrategyHint(document.getElementById('wake_strategy')?.value);
+// ── Network discovery ────────────────────────────────────────────────────────
+let allHosts = [];
+let showDocker = false;
+
+const DOCKER_IFACES = /^(docker|br-|veth|hassio)/;
+
+function fillForm(host) {
+  const ip = document.getElementById('f-ip');
+  const mac = document.getElementById('f-mac');
+  if (ip) ip.value = host.ip_address;
+  if (mac) mac.value = host.mac_address;
+  document.getElementById('f-name')?.focus();
+}
+
+function renderDiscovery() {
+  const table = document.getElementById('discovery-table');
+  const countEl = document.getElementById('discovery-count');
+  if (!table) return;
+
+  const visible = allHosts.filter(h => showDocker || !DOCKER_IFACES.test(h.interface));
+  countEl.textContent = visible.length + ' device' + (visible.length !== 1 ? 's' : '') + ' found';
+
+  if (visible.length === 0) {
+    table.innerHTML = '<div class="text-xs text-gray-400 italic py-2">No devices found. Make sure devices are online and reachable, then refresh.</div>';
+    return;
+  }
+
+  let html = `<div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead>
+        <tr class="text-left text-gray-500 border-b border-gray-100">
+          <th class="pb-1.5 pr-3 font-medium">IP Address</th>
+          <th class="pb-1.5 pr-3 font-medium">MAC Address</th>
+          <th class="pb-1.5 pr-3 font-medium">Interface</th>
+          <th class="pb-1.5 font-medium"></th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  visible.forEach(h => {
+    const rowCls = h.flags === '0x2'
+      ? 'hover:bg-indigo-50 cursor-pointer'
+      : 'opacity-50 hover:bg-gray-50 cursor-pointer';
+    const badge = h.flags === '0x2'
+      ? '<span class="inline-block px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs">online</span>'
+      : '<span class="inline-block px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 text-xs">stale</span>';
+    html += `<tr class="border-b border-gray-50 transition-colors ${rowCls}"
+               onclick='fillForm(${JSON.stringify(h)})'>
+      <td class="py-2 pr-3 font-mono">${h.ip_address}</td>
+      <td class="py-2 pr-3 font-mono">${h.mac_address}</td>
+      <td class="py-2 pr-3 text-gray-500">${h.interface}</td>
+      <td class="py-2">${badge}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  html += '<p class="text-xs text-gray-400 mt-2">Click any row to fill the form. Stale entries were seen recently but may be offline now.</p>';
+  table.innerHTML = html;
+}
+
+function loadDiscovery() {
+  const btn = document.getElementById('btn-refresh');
+  const icon = document.getElementById('refresh-icon');
+  const table = document.getElementById('discovery-table');
+  if (!table) return;
+  if (btn) btn.disabled = true;
+  if (icon) icon.classList.add('animate-spin');
+  table.innerHTML = '<div class="text-xs text-gray-400 italic py-2">Scanning ARP cache…</div>';
+
+  fetch('/api/system/discover')
+    .then(r => r.json())
+    .then(hosts => {
+      allHosts = hosts;
+      renderDiscovery();
+    })
+    .catch(() => {
+      if (table) table.innerHTML = '<div class="text-xs text-red-400 italic py-2">Could not load discovery data.</div>';
+    })
+    .finally(() => {
+      if (btn) btn.disabled = false;
+      if (icon) icon.classList.remove('animate-spin');
+    });
+}
+
+document.getElementById('toggle-docker')?.addEventListener('change', function() {
+  showDocker = this.checked;
+  renderDiscovery();
+});
+
+// Init
+updateStrategyHint(document.getElementById('f-strategy')?.value);
+loadDiscovery();
 </script>
 {% endblock %}
