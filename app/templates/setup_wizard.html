@@ -126,6 +126,11 @@
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
           <option value="">— auto (default interface) —</option>
         </select>
+        <label class="flex items-center gap-2 mt-2 text-xs text-gray-500 cursor-pointer select-none">
+          <input type="checkbox" id="show_virtual" onchange="populateInterfaces()"
+                 class="rounded border-gray-300" />
+          Show virtual interfaces (loopback, docker bridges, veth)
+        </label>
         <p class="text-xs text-gray-400 mt-1">
           The network interface used to send wake packets. Usually your LAN port.
         </p>
@@ -301,23 +306,34 @@ function updateStrategyHint(val) {
 }
 
 // ── Load interfaces for the network step dropdown ───────────────────────────
+let _allIfaces = [];
 const ifaceSelect = document.getElementById('wake_interface');
+
+function populateInterfaces() {
+  if (!ifaceSelect) return;
+  const showVirtual = document.getElementById('show_virtual')?.checked ?? false;
+  const saved = {{ (form.wake_interface | default('')) | tojson }};
+  const current = ifaceSelect.value || saved;
+  // Clear all but the first "auto" option
+  while (ifaceSelect.options.length > 1) ifaceSelect.remove(1);
+  _allIfaces.forEach(iface => {
+    if (!showVirtual && iface.is_virtual) return;
+    const opt = document.createElement('option');
+    opt.value = iface.name;
+    const tags = [];
+    if (iface.is_up) tags.push('up');
+    if (iface.type !== 'ethernet' && iface.type !== 'wifi') tags.push(iface.type);
+    opt.textContent = iface.name + (tags.length ? ' (' + tags.join(', ') + ')' : '');
+    ifaceSelect.appendChild(opt);
+  });
+  if (current) ifaceSelect.value = current;
+}
+
 if (ifaceSelect) {
   fetch('/api/system/interfaces')
-    .then(r => r.json())
-    .then(ifaces => {
-      ifaces.forEach(iface => {
-        if (iface.is_loopback) return;
-        const opt = document.createElement('option');
-        opt.value = iface.name;
-        opt.textContent = iface.name + (iface.is_up ? ' (up)' : ' (down)');
-        ifaceSelect.appendChild(opt);
-      });
-      const saved = {{ (form.wake_interface | default('')) | tojson }};
-      if (saved) ifaceSelect.value = saved;
-    })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(ifaces => { _allIfaces = ifaces; populateInterfaces(); })
     .catch(() => {});
-  // Show hint for default strategy on load
   updateStrategyHint(document.getElementById('default_wake_strategy')?.value || 'etherwake');
 }
 </script>

@@ -38,10 +38,14 @@ def _proc(filename: str) -> str:
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
+_VIRTUAL_TYPES = {"loopback", "veth", "docker-bridge", "bridge"}
+
+
 class NetworkInterface(BaseModel):
     name: str
     type: str
     is_loopback: bool
+    is_virtual: bool
     is_up: bool
     is_running: bool
     mac_address: str
@@ -213,6 +217,7 @@ def _list_interfaces() -> list[NetworkInterface]:
                 name=name,
                 type=itype,
                 is_loopback=bool(flags & 0x8),
+                is_virtual=itype in _VIRTUAL_TYPES,
                 is_up=bool(flags & 0x1),
                 is_running=bool(flags & 0x40),
                 mac_address="",
