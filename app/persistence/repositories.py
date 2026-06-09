@@ -146,6 +146,10 @@ class SqlUserRepository(UserRepository):
         )
         await self._session.execute(stmt)
 
+    async def update_password_hash(self, user_id: str, password_hash: str) -> None:
+        stmt = update(UserModel).where(UserModel.id == user_id).values(password_hash=password_hash)
+        await self._session.execute(stmt)
+
     async def count(self) -> int:
         result = await self._session.execute(select(func.count()).select_from(UserModel))
         return result.scalar_one()

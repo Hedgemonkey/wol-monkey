@@ -116,7 +116,6 @@ class TestMachineRepository:
 # WakeAttempt repository
 # ---------------------------------------------------------------------------
 class TestWakeAttemptRepository:
-    # All MAC last-octets must be valid hex (00-ff)
     async def _make_machine(self, db_session: AsyncSession, mac_last: str = "e1") -> str:
         repo = SqlMachineRepository(db_session)
         m = await repo.create(

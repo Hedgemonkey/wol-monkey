@@ -8,6 +8,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
+from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.config import get_settings
 
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(health_router, prefix="/api")
+    app.include_router(auth_router, prefix="/api")
 
     return app
 

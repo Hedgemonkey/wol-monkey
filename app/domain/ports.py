@@ -109,6 +109,9 @@ class UserRepository(ABC):
     async def update_last_login(self, user_id: str) -> None: ...
 
     @abstractmethod
+    async def update_password_hash(self, user_id: str, password_hash: str) -> None: ...
+
+    @abstractmethod
     async def count(self) -> int: ...
 
 
