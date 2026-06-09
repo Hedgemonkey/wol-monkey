@@ -17,26 +17,34 @@
     <h2 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">Wake Defaults</h2>
 
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Wake Interface</label>
-      <input name="wake_interface" type="text"
-             value="{{ settings.wake_interface | default('') }}" placeholder="e.g. eth0"
-             class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
-    </div>
-
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Default Wake Strategy</label>
-      <select name="default_wake_strategy"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-        <option value="etherwake" {% if settings.default_wake_strategy == 'etherwake' %}selected{% endif %}>etherwake</option>
-        <option value="udp_broadcast" {% if settings.default_wake_strategy == 'udp_broadcast' %}selected{% endif %}>UDP broadcast</option>
+      <label class="block text-sm font-medium text-gray-700 mb-1" for="wake_interface">Wake Interface</label>
+      <select id="wake_interface" name="wake_interface"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        <option value="">— auto (default interface) —</option>
       </select>
+      <p class="text-xs text-gray-400 mt-1">The network interface used to send wake packets.</p>
     </div>
 
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Default Poll Timeout (s)</label>
-      <input name="default_poll_timeout_s" type="number" min="10" max="600"
-             value="{{ settings.default_poll_timeout_s | default(120) }}"
-             class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+      <label class="block text-sm font-medium text-gray-700 mb-1" for="default_wake_strategy">Default Wake Strategy</label>
+      <select id="default_wake_strategy" name="default_wake_strategy"
+              onchange="updateStrategyHint(this.value)"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        <option value="etherwake" {% if settings.default_wake_strategy == 'etherwake' %}selected{% endif %}>etherwake — Layer 2 magic packet</option>
+        <option value="udp_broadcast" {% if settings.default_wake_strategy == 'udp_broadcast' %}selected{% endif %}>UDP broadcast — no root required</option>
+      </select>
+      <div id="strategy-hint" class="mt-2 rounded-lg border px-4 py-3 text-xs leading-relaxed hidden"></div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1" for="default_poll_timeout_s">Wake Poll Timeout</label>
+      <div class="flex items-center gap-2">
+        <input id="default_poll_timeout_s" name="default_poll_timeout_s" type="number" min="10" max="600"
+               value="{{ settings.default_poll_timeout_s | default(120) }}"
+               class="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        <span class="text-sm text-gray-500">seconds</span>
+      </div>
+      <p class="text-xs text-gray-400 mt-1">How long to wait for a machine to respond after sending a wake packet (10–600 s).</p>
     </div>
   </div>
 
@@ -49,10 +57,13 @@
       <label for="allow_api_tokens" class="text-sm font-medium text-gray-700">Allow API token creation</label>
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Session lifetime (hours)</label>
-      <input name="session_lifetime_hours" type="number" min="1" max="720"
-             value="{{ settings.session_lifetime_hours | default(12) }}"
-             class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+      <label class="block text-sm font-medium text-gray-700 mb-1" for="session_lifetime_hours">Session lifetime</label>
+      <div class="flex items-center gap-2">
+        <input id="session_lifetime_hours" name="session_lifetime_hours" type="number" min="1" max="720"
+               value="{{ settings.session_lifetime_hours | default(12) }}"
+               class="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        <span class="text-sm text-gray-500">hours</span>
+      </div>
     </div>
   </div>
 
@@ -61,4 +72,63 @@
     Save settings
   </button>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const STRATEGY_HINTS = {
+  etherwake: {
+    cls: 'border-blue-200 bg-blue-50 text-blue-800',
+    html: `<strong>etherwake</strong> sends a raw Layer-2 magic packet directly on the network.
+           Requires the worker container to have <code class="font-mono bg-blue-100 px-1 rounded">CAP_NET_RAW</code>
+           and <code class="font-mono bg-blue-100 px-1 rounded">network_mode: host</code> — both are set by default
+           in the Docker Compose file.
+           <span class="text-blue-600 mt-1 block">Best choice when WoL-Monkey is on the same LAN segment as your machines.</span>`
+  },
+  udp_broadcast: {
+    cls: 'border-amber-200 bg-amber-50 text-amber-800',
+    html: `<strong>UDP broadcast</strong> sends the magic packet as a UDP datagram to port 9.
+           Requires no special permissions and works across subnets when your router
+           forwards directed broadcasts.
+           <span class="text-amber-600 mt-1 block">Good choice if you cannot use <code class="font-mono bg-amber-100 px-1 rounded">network_mode: host</code>
+           or if WoL-Monkey is on a different subnet.</span>`
+  }
+};
+
+function updateStrategyHint(val) {
+  const el = document.getElementById('strategy-hint');
+  if (!el) return;
+  const h = STRATEGY_HINTS[val];
+  if (!h) { el.classList.add('hidden'); return; }
+  el.className = 'mt-2 rounded-lg border px-4 py-3 text-xs leading-relaxed ' + h.cls;
+  el.innerHTML = h.html;
+}
+
+// Populate interface dropdown
+const ifaceSelect = document.getElementById('wake_interface');
+const savedIface = {{ (settings.wake_interface | default('')) | tojson }};
+fetch('/api/system/interfaces')
+  .then(r => r.json())
+  .then(ifaces => {
+    ifaces.forEach(iface => {
+      if (iface.is_loopback) return;
+      const opt = document.createElement('option');
+      opt.value = iface.name;
+      opt.textContent = iface.name + (iface.is_up ? ' (up)' : ' (down)');
+      if (iface.name === savedIface) opt.selected = true;
+      ifaceSelect.appendChild(opt);
+    });
+    if (savedIface && !ifaceSelect.value) {
+      const opt = document.createElement('option');
+      opt.value = savedIface;
+      opt.textContent = savedIface + ' (not detected)';
+      opt.selected = true;
+      ifaceSelect.appendChild(opt);
+    }
+  })
+  .catch(() => {});
+
+// Show hint for current strategy on load
+updateStrategyHint(document.getElementById('default_wake_strategy')?.value);
+</script>
 {% endblock %}

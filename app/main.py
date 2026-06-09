@@ -14,6 +14,7 @@ from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.machines import router as machines_router
 from app.api.setup import router as setup_router
+from app.api.system import router as system_router
 from app.api.wake import router as wake_router
 from app.api.web import router as web_router
 from app.config import get_settings
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/api")
     app.include_router(auth_router, prefix="/api")
     app.include_router(setup_router, prefix="/api")
+    app.include_router(system_router, prefix="/api")
     app.include_router(machines_router, prefix="/api")
     app.include_router(wake_router, prefix="/api")
     app.include_router(web_router)

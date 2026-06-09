@@ -56,29 +56,33 @@
                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
       </div>
 
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Wake Strategy</label>
-        <select name="wake_strategy"
+      <div class="col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="wake_strategy">Wake Strategy</label>
+        <select id="wake_strategy" name="wake_strategy"
+                onchange="updateStrategyHint(this.value)"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-          <option value="etherwake" {% if not machine or machine.wake_strategy == 'etherwake' %}selected{% endif %}>etherwake (L2)</option>
-          <option value="udp_broadcast" {% if machine and machine.wake_strategy == 'udp_broadcast' %}selected{% endif %}>UDP broadcast</option>
+          <option value="etherwake" {% if not machine or machine.wake_strategy == 'etherwake' %}selected{% endif %}>etherwake — Layer 2 magic packet</option>
+          <option value="udp_broadcast" {% if machine and machine.wake_strategy == 'udp_broadcast' %}selected{% endif %}>UDP broadcast — no root required</option>
         </select>
+        <div id="strategy-hint" class="mt-2 rounded-lg border px-4 py-3 text-xs leading-relaxed hidden"></div>
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Wake Interface</label>
-        <input name="wake_interface" type="text"
-               value="{{ machine.wake_interface if machine else '' }}"
-               placeholder="eth0"
-               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="wake_interface">Wake Interface</label>
+        <select id="wake_interface" name="wake_interface"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <option value="">— use default —</option>
+        </select>
+        <p class="text-xs text-gray-400 mt-1">Override the global default for this machine only.</p>
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Broadcast Address</label>
-        <input name="broadcast_address" type="text"
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="broadcast_address">Broadcast Address</label>
+        <input id="broadcast_address" name="broadcast_address" type="text"
                value="{{ machine.broadcast_address if machine else '' }}"
-               placeholder="192.168.1.255"
-               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+               placeholder="leave blank to auto-detect"
+               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        <p class="text-xs text-gray-400 mt-1">Only needed for UDP broadcast on non-standard subnets.</p>
       </div>
 
       <div class="col-span-2 flex items-center gap-2">
@@ -101,4 +105,71 @@
     </div>
   </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const STRATEGY_HINTS = {
+  etherwake: {
+    cls: 'border-blue-200 bg-blue-50 text-blue-800',
+    html: `<strong>etherwake</strong> sends a raw Layer-2 magic packet directly on the network.
+           Requires the worker to have <code class="font-mono bg-blue-100 px-1 rounded">CAP_NET_RAW</code>
+           and <code class="font-mono bg-blue-100 px-1 rounded">network_mode: host</code> — both set by default
+           in the Docker Compose file.
+           <span class="text-blue-600 mt-1 block">Best choice when WoL-Monkey is on the same LAN segment as this machine.</span>`
+  },
+  udp_broadcast: {
+    cls: 'border-amber-200 bg-amber-50 text-amber-800',
+    html: `<strong>UDP broadcast</strong> sends the magic packet as a UDP datagram to port 9.
+           No special permissions needed; works across subnets when your router forwards directed broadcasts.
+           <span class="text-amber-600 mt-1 block">Good choice if etherwake is unavailable or this machine is on a different subnet.</span>`
+  }
+};
+
+function updateStrategyHint(val) {
+  const el = document.getElementById('strategy-hint');
+  if (!el) return;
+  const h = STRATEGY_HINTS[val];
+  if (!h) { el.classList.add('hidden'); return; }
+  el.className = 'mt-2 rounded-lg border px-4 py-3 text-xs leading-relaxed ' + h.cls;
+  el.innerHTML = h.html;
+}
+
+// MAC address auto-formatter — inserts colons as user types
+const macInput = document.querySelector('input[name="mac_address"]');
+if (macInput) {
+  macInput.addEventListener('input', function() {
+    let v = this.value.replace(/[^0-9a-fA-F]/g, '');
+    v = v.slice(0, 12);
+    this.value = v.match(/.{1,2}/g)?.join(':') || v;
+  });
+}
+
+// Interface dropdown
+const ifaceSelect = document.getElementById('wake_interface');
+const savedIface = {{ (machine.wake_interface if machine and machine.wake_interface else '') | tojson }};
+fetch('/api/system/interfaces')
+  .then(r => r.json())
+  .then(ifaces => {
+    ifaces.forEach(iface => {
+      if (iface.is_loopback) return;
+      const opt = document.createElement('option');
+      opt.value = iface.name;
+      opt.textContent = iface.name + (iface.is_up ? ' (up)' : ' (down)');
+      if (iface.name === savedIface) opt.selected = true;
+      ifaceSelect.appendChild(opt);
+    });
+    if (savedIface && !ifaceSelect.value) {
+      const opt = document.createElement('option');
+      opt.value = savedIface;
+      opt.textContent = savedIface + ' (not detected)';
+      opt.selected = true;
+      ifaceSelect.appendChild(opt);
+    }
+  })
+  .catch(() => {});
+
+// Show strategy hint on load
+updateStrategyHint(document.getElementById('wake_strategy')?.value);
+</script>
 {% endblock %}

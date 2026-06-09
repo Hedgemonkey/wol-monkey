@@ -6,7 +6,7 @@
   <title>Setup — WoL-Monkey</title>
   <link rel="stylesheet" href="/static/css/app.css" />
 </head>
-<body class="h-full bg-gray-50 flex items-center justify-center">
+<body class="h-full bg-gray-50 flex items-center justify-center py-8">
   <div class="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
     <div class="text-center mb-6">
       <span class="text-5xl">🐒</span>
@@ -30,11 +30,12 @@
     </div>
     {% endif %}
 
+    {# ── Welcome ──────────────────────────────────────────────────────────── #}
     {% if step == 'welcome' %}
     <h2 class="text-lg font-semibold mb-2">Welcome</h2>
     <p class="text-sm text-gray-600 mb-6">
       This wizard will help you configure WoL-Monkey. You'll create an admin account,
-      configure your network, and add your first machine.
+      configure your network, and optionally add your first machine.
     </p>
     <form method="post" action="/setup/welcome">
       <button type="submit"
@@ -43,61 +44,102 @@
       </button>
     </form>
 
+    {# ── Admin account ────────────────────────────────────────────────────── #}
     {% elif step == 'admin_account' %}
     <h2 class="text-lg font-semibold mb-4">Create Admin Account</h2>
-    <form method="post" action="/setup/admin" class="space-y-3">
+    <form method="post" action="/setup/admin" id="admin-form" class="space-y-3" novalidate>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
-        <input name="username" type="text" required minlength="3" autofocus
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="username">Username</label>
+        <input id="username" name="username" type="text" required minlength="3" autofocus
+               autocomplete="username"
                value="{{ form.username | default('') }}"
                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-        <input name="password" type="password" required minlength="12"
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="password">Password</label>
+        <input id="password" name="password" type="password" required minlength="12"
+               autocomplete="new-password"
+               oninput="updateStrength(this.value)"
                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
-        <p class="text-xs text-gray-400 mt-1">At least 12 characters</p>
+        <div class="mt-1.5 flex gap-1 h-1">
+          <div id="bar0" class="flex-1 rounded-full bg-gray-200 transition-colors"></div>
+          <div id="bar1" class="flex-1 rounded-full bg-gray-200 transition-colors"></div>
+          <div id="bar2" class="flex-1 rounded-full bg-gray-200 transition-colors"></div>
+          <div id="bar3" class="flex-1 rounded-full bg-gray-200 transition-colors"></div>
+        </div>
+        <p id="strength-label" class="text-xs text-gray-400 mt-1">At least 12 characters</p>
       </div>
-      <button type="submit"
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="confirm_password">Confirm Password</label>
+        <input id="confirm_password" type="password" required
+               autocomplete="new-password"
+               oninput="checkMatch()"
+               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        <p id="match-msg" class="text-xs mt-1 hidden"></p>
+      </div>
+      <button type="submit" id="admin-submit"
               class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 text-sm transition-colors mt-2">
         Create account →
       </button>
     </form>
 
+    {# ── Network ──────────────────────────────────────────────────────────── #}
     {% elif step == 'network' %}
     <h2 class="text-lg font-semibold mb-4">Network Configuration</h2>
-    <form method="post" action="/setup/network" class="space-y-3">
+    <form method="post" action="/setup/network" class="space-y-4">
+
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Wake Interface</label>
-        <input name="wake_interface" type="text"
-               value="{{ form.wake_interface | default('') }}" placeholder="e.g. eth0 or enP4p65s0"
-               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
-        <p class="text-xs text-gray-400 mt-1">Leave blank to use default interface</p>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Default Wake Strategy</label>
-        <select name="default_wake_strategy"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-          <option value="etherwake">etherwake (Layer 2 — requires CAP_NET_RAW)</option>
-          <option value="udp_broadcast">UDP broadcast (no special privileges)</option>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="wake_interface">
+          Wake Interface
+        </label>
+        <select id="wake_interface" name="wake_interface"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <option value="">— auto (default interface) —</option>
         </select>
+        <p class="text-xs text-gray-400 mt-1">
+          The network interface used to send wake packets. Usually your LAN port.
+        </p>
       </div>
+
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Default Poll Timeout (seconds)</label>
-        <input name="default_poll_timeout_s" type="number" min="10" max="600"
-               value="{{ form.default_poll_timeout_s | default(120) }}"
-               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="default_wake_strategy">
+          Default Wake Strategy
+        </label>
+        <select id="default_wake_strategy" name="default_wake_strategy"
+                onchange="updateStrategyHint(this.value)"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <option value="etherwake">etherwake — Layer 2 magic packet</option>
+          <option value="udp_broadcast">UDP broadcast — no root required</option>
+        </select>
+        <div id="strategy-hint" class="mt-2 rounded-lg border px-4 py-3 text-xs leading-relaxed"></div>
       </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="default_poll_timeout_s">
+          Wake Poll Timeout
+        </label>
+        <div class="flex items-center gap-2">
+          <input id="default_poll_timeout_s" name="default_poll_timeout_s" type="number" min="10" max="600"
+                 value="{{ form.default_poll_timeout_s | default(120) }}"
+                 class="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          <span class="text-sm text-gray-500">seconds</span>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">
+          How long to wait for a machine to come online after sending a wake packet (10–600 s).
+        </p>
+      </div>
+
       <button type="submit"
-              class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 text-sm transition-colors mt-2">
+              class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 text-sm transition-colors">
         Save &amp; continue →
       </button>
     </form>
 
+    {# ── First machine ────────────────────────────────────────────────────── #}
     {% elif step == 'first_machine' %}
-    <h2 class="text-lg font-semibold mb-2">Add First Machine</h2>
+    <h2 class="text-lg font-semibold mb-2">Add Your First Machine</h2>
     <p class="text-sm text-gray-600 mb-4">
-      You can skip this and add machines later from the dashboard.
+      Add a machine to wake now, or skip and add them later from the dashboard.
     </p>
     <div class="flex gap-2">
       <a href="/machines/new?from=setup"
@@ -107,11 +149,12 @@
       <form method="post" action="/setup/skip_machine" class="flex-1">
         <button type="submit"
                 class="w-full rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 text-sm transition-colors">
-          Skip
+          Skip for now
         </button>
       </form>
     </div>
 
+    {# ── Complete ─────────────────────────────────────────────────────────── #}
     {% elif step == 'complete' %}
     <div class="text-center">
       <span class="text-5xl">🎉</span>
@@ -126,5 +169,109 @@
     </div>
     {% endif %}
   </div>
+
+<script>
+// ── Password strength ────────────────────────────────────────────────────────
+const BARS = [0,1,2,3].map(i => document.getElementById('bar' + i));
+const STRENGTH_LABELS = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'];
+const STRENGTH_COLORS = ['bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-lime-500', 'bg-green-500'];
+
+function scorePassword(pw) {
+  if (pw.length < 12) return 0;
+  let s = 1;
+  if (pw.length >= 16) s++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
+  if (/[0-9]/.test(pw)) s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  return Math.min(s, 4);
+}
+
+function updateStrength(pw) {
+  const score = scorePassword(pw);
+  const label = document.getElementById('strength-label');
+  BARS.forEach((b, i) => {
+    b.className = 'flex-1 rounded-full transition-colors ' + (i < score ? STRENGTH_COLORS[score] : 'bg-gray-200');
+  });
+  label.textContent = pw.length === 0 ? 'At least 12 characters' : STRENGTH_LABELS[score];
+  label.className = 'text-xs mt-1 ' + (score < 2 && pw.length > 0 ? 'text-red-500' : 'text-gray-400');
+  checkMatch();
+}
+
+// ── Confirm password match ───────────────────────────────────────────────────
+function checkMatch() {
+  const pw = document.getElementById('password');
+  const confirm = document.getElementById('confirm_password');
+  const msg = document.getElementById('match-msg');
+  const btn = document.getElementById('admin-submit');
+  if (!confirm || !pw) return;
+  if (confirm.value.length === 0) { msg.classList.add('hidden'); return; }
+  const ok = pw.value === confirm.value;
+  msg.textContent = ok ? '✓ Passwords match' : '✗ Passwords do not match';
+  msg.className = 'text-xs mt-1 ' + (ok ? 'text-green-600' : 'text-red-500');
+  msg.classList.remove('hidden');
+  btn.disabled = !ok;
+  btn.classList.toggle('opacity-50', !ok);
+  btn.classList.toggle('cursor-not-allowed', !ok);
+}
+
+const adminForm = document.getElementById('admin-form');
+if (adminForm) {
+  adminForm.addEventListener('submit', e => {
+    const pw = document.getElementById('password').value;
+    const confirm = document.getElementById('confirm_password').value;
+    if (pw !== confirm) { e.preventDefault(); return; }
+  });
+}
+
+// ── Strategy hint ────────────────────────────────────────────────────────────
+const STRATEGY_HINTS = {
+  etherwake: {
+    cls: 'border-blue-200 bg-blue-50 text-blue-800',
+    html: `<strong>etherwake</strong> sends a raw Layer-2 magic packet directly on the network.
+           It requires the worker container to have <code class="font-mono bg-blue-100 px-1 rounded">CAP_NET_RAW</code>
+           and <code class="font-mono bg-blue-100 px-1 rounded">network_mode: host</code> — both are set by default
+           in the Docker Compose file.
+           <br><span class="text-blue-600 mt-1 block">Best choice if WoL-Monkey is on the same LAN segment as your machines.</span>`
+  },
+  udp_broadcast: {
+    cls: 'border-amber-200 bg-amber-50 text-amber-800',
+    html: `<strong>UDP broadcast</strong> sends the magic packet as a UDP datagram to port 9.
+           It requires no special permissions and works across subnets when your router
+           forwards directed broadcasts.
+           <br><span class="text-amber-600 mt-1 block">Good choice if you cannot use <code class="font-mono bg-amber-100 px-1 rounded">network_mode: host</code>,
+           or if WoL-Monkey is on a different subnet.</span>`
+  }
+};
+
+function updateStrategyHint(val) {
+  const el = document.getElementById('strategy-hint');
+  if (!el) return;
+  const h = STRATEGY_HINTS[val];
+  if (!h) { el.innerHTML = ''; return; }
+  el.className = 'mt-2 rounded-lg border px-4 py-3 text-xs leading-relaxed ' + h.cls;
+  el.innerHTML = h.html;
+}
+
+// ── Load interfaces for the network step dropdown ───────────────────────────
+const ifaceSelect = document.getElementById('wake_interface');
+if (ifaceSelect) {
+  fetch('/api/system/interfaces')
+    .then(r => r.json())
+    .then(ifaces => {
+      ifaces.forEach(iface => {
+        if (iface.is_loopback) return;
+        const opt = document.createElement('option');
+        opt.value = iface.name;
+        opt.textContent = iface.name + (iface.is_up ? ' (up)' : ' (down)');
+        ifaceSelect.appendChild(opt);
+      });
+      const saved = {{ (form.wake_interface | default('')) | tojson }};
+      if (saved) ifaceSelect.value = saved;
+    })
+    .catch(() => {});
+  // Show hint for default strategy on load
+  updateStrategyHint(document.getElementById('default_wake_strategy')?.value || 'etherwake');
+}
+</script>
 </body>
 </html>
